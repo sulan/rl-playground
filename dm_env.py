@@ -41,7 +41,7 @@ class DumbMarsEnvironment (Env):
 
         self._seed()
 
-        self.visited_states = collections.Counter()
+        # self.visited_states = collections.Counter()
 
     def _seed (self, seed = None):
         self.np_random, seed = gyme.np_random(seed)
@@ -129,7 +129,7 @@ class DumbMars1DEnvironment(DumbMarsEnvironment):
         else:
             starting_height = self.height
         self.state = np.array([starting_height,0,0])
-        self.visited_states[tuple(self.state)] += 1
+        # self.visited_states[tuple(self.state)] += 1
         self.lastReward = None
         return np.array(self.state)
 
@@ -152,7 +152,7 @@ class DumbMars1DEnvironment(DumbMarsEnvironment):
 
         self.state = np.array([y,v,a])
         self.lastReward = reward
-        self.visited_states[tuple(self.state)] += 1
+        # self.visited_states[tuple(self.state)] += 1
 
         return np.array(self.state), reward, done, {}
 
