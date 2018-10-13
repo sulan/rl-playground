@@ -16,18 +16,23 @@ CONFIG = ConfigParser('./config.json')
 NUM_STEPS = CONFIG.getOption('num_steps', 100)
 VERBOSE_TRAINING = CONFIG.getOption('verbose_training', 0)
 
+class PrettyPrintEncoder(json.JSONEncoder):
+    def default(self, o):
+        return str(o)
+
 class Configurable:
     def __init__(self, default):
         self.config = dict(default)
 
     def print_config(self):
-        return json.dumps(self.config, sort_keys = True, indent = 4)
+        return json.dumps(self.config, sort_keys = True, indent = 4,
+                          cls = PrettyPrintEncoder)
 
 
 class Runner(Configurable):
     def __init__(self):
         super().__init__({
-            'optimizer' : 'adam',
+            'optimizer' : Adam(),
             'epsilon' : 0.3,
             'num_steps' : NUM_STEPS,
             'target_model_update' : 10e-3,
