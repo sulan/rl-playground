@@ -40,6 +40,12 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
     """
     Callback to write statistics for training steps and episodes to a HDF5
     file
+
+    Statistics collected:
+        - loss (TD-error in one update)
+        - reward at the end of each training episode
+        - reward prediction (predicted V value for the starting state after
+          each episode)
     """
 
     def __init__(self, file_name, measurement_name, max_num_steps):
@@ -59,18 +65,32 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         self.num_steps = 0
         self.loss = self.group.create_dataset('loss', shape = (max_num_steps,),
                                               dtype = 'f4')
+        self.first_observation = None
+        self.reward_prediction = self.group.create_dataset('reward_prediction',
+                                                           shape = (self.episode_rewards_size,),
+                                                           maxshape = (None,),
+                                                           dtype = 'f4')
 
     def on_step_end(self, step, logs):
         # TODO find out which one is the loss in a more intelligent manner
         cur_loss = logs['metrics'][0]
         self.loss[self.num_steps] = cur_loss
         self.num_steps += 1
+        if step == 0:
+            self.first_observation = np.array(logs['observation'])
+            # It needs to be in the right shape for prediction
+            self.first_observation.shape = (1, 1, -1)
 
-    def on_episode_end(self, episode, logs):
-        # Reallocate array if necessary
+    def _grow_episode_datasets(self, episode):
+        '''Reallocate array if necessary'''
         while self.episode_rewards_size <= episode:
             self.episode_rewards_size *= 2
         self.episode_rewards.resize(self.episode_rewards_size, axis = 0)
+        self.reward_prediction.resize(self.episode_rewards_size, axis = 0)
+
+
+    def on_episode_end(self, episode, logs):
+        self._grow_episode_datasets(episode)
 
         num_episodes = self.num_episodes[0]
         if episode != num_episodes:
@@ -80,6 +100,11 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         cur_reward = logs['episode_reward']
         self.episode_rewards[episode] = cur_reward
         self.num_episodes[0] = max(episode + 1, num_episodes)
+
+        agent = self.model
+        model = agent.model
+        cur_reward_prediction = np.max(model.predict(self.first_observation))
+        self.reward_prediction[episode] = cur_reward_prediction
 
     def on_train_end(self, logs):
         self.file.close()
@@ -95,13 +120,15 @@ class Runner(Configurable):
             'num_steps' : NUM_STEPS,
             'optimizer' : Adam(),
             'seed' : int(time.time() * 10000),
-            'starting_height' : 10,
+            'starting_height' : 20,
             'target_model_update' : 10e-3,
             })
         self.agent = None
+        self.model = None
         self.env = None
 
-    def _createModel(self):
+    @staticmethod
+    def _createModel():
         model = Sequential([
             Flatten(input_shape = (1,DumbMars1DEnvironment.NUM_SENSORS,)),
             Dense(20, activation='relu'),
@@ -111,12 +138,12 @@ class Runner(Configurable):
         return model
 
     def createAgent(self):
-        model = self._createModel()
+        self.model = Runner._createModel()
         memory = SequentialMemory(limit = 50000, window_length = 1)
         policy = EpsGreedyQPolicy(eps = self.config['epsilon'])
         test_policy = EpsGreedyQPolicy(eps = 0)
 
-        self.agent = DQNAgent(model = model,
+        self.agent = DQNAgent(model = self.model,
                               nb_actions = DumbMars1DEnvironment.NUM_ACTIONS,
                               memory = memory,
                               nb_steps_warmup = 50,
