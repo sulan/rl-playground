@@ -7,7 +7,7 @@ from keras.layers import Dense, Activation, Flatten
 from keras.optimizers import RMSprop, Adam
 
 from rl.agents.dqn import DQNAgent
-from rl.policy import EpsGreedyQPolicy
+from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
 from rl.memory import SequentialMemory
 import rl.callbacks
 
@@ -137,6 +137,22 @@ class Runner(Configurable):
             ])
         return model
 
+    def _getTrainPolicy(self):
+        config = self.config['epsilon']
+        if isinstance(config, float) or isinstance(config, int):
+            assert 0 <= config <= 1, 'Epsilon must be in [0, 1]'
+            return EpsGreedyQPolicy(eps = config)
+        if isinstance(config, tuple):
+            assert len(config) == 3, 'Unknown policy configuration'
+            return LinearAnnealedPolicy(inner_policy = EpsGreedyQPolicy(),
+                                        attr = 'eps',
+                                        value_max = config[0],
+                                        value_min = config[1],
+                                        value_test = None,
+                                        nb_steps = config[2])
+        return config
+
+
     def createAgent(self):
         self.model = Runner._createModel()
         memory = SequentialMemory(limit = 50000, window_length = 1)
@@ -150,7 +166,7 @@ class Runner(Configurable):
                               target_model_update = \
                                   self.config['target_model_update'],
                               gamma = self.config['gamma'],
-                              policy = policy,
+                              policy = self._getTrainPolicy(),
                               test_policy = test_policy,
                               enable_double_dqn = self.config['double_dqn'])
         self.agent.compile(self.config['optimizer'], metrics = ['mae'])
@@ -197,6 +213,7 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner()
+    runner.config['epsilon'] = (0.3, 0., 100000)
     runner.createAgent()
     runner.fit(num_epoch)
     m, v = runner.test()
