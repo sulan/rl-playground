@@ -4,7 +4,7 @@ Gomoku player implementation. Adapted from https://github.com/jPhy/Gomoku.
 
 'Gomoku players'
 
-from __future__ import print_function
+# from __future__ import print_function
 from ..board import InvalidMoveError
 from .lib import Playerlibrary
 
@@ -38,19 +38,19 @@ class Player(Playerlibrary):
             The game ``BoardGui`` as described in "gui.py"
 
         """
-        gui.renew_board()
-        if hasattr(gui.board, 'lastmove'):
-            gui.highlight_lastmove()
-        gui.color_in_turn = self.color
-        moves_left = gui.board.moves_left
+        # gui.renew_board()
+        # if hasattr(gui.board, 'lastmove'):
+        #     gui.highlight_lastmove()
+        # gui.color_in_turn = self.color
+        # moves_left = gui.board.moves_left
 
         self._make_move(gui)
 
-        if not gui.in_game:
-            return
+        # if not gui.in_game:
+        #     return
 
-        if not moves_left - 1 == gui.board.moves_left:
-            raise InvalidMoveError('Player "%s" did not place a stone.' % self.name)
+        # if not moves_left - 1 == gui.board.moves_left:
+        #     raise InvalidMoveError('Player "%s" did not place a stone.' % self.name)
 
     def _make_move(self, gui):
         "Override this function for specific players"

@@ -13,6 +13,7 @@ import rl.callbacks
 
 from config_parser import ConfigParser
 from dm_env import DumbMars1DEnvironment
+from gomoku_env import GomokuEnvironment
 
 
 CONFIG = ConfigParser('./config.json')
@@ -79,7 +80,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         if step == 0:
             self.first_observation = np.array(logs['observation'])
             # It needs to be in the right shape for prediction
-            self.first_observation.shape = (1, 1, -1)
+            self.first_observation.shape = (1, 1) + self.first_observation.shape
 
     def _grow_episode_datasets(self, episode):
         '''Reallocate array if necessary'''
@@ -111,7 +112,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
 
 class Runner(Configurable):
-    def __init__(self):
+    def __init__(self, env_cls):
         super().__init__({
             'double_dqn' : False,
             'epsilon' : 0.3,
@@ -120,26 +121,27 @@ class Runner(Configurable):
             'num_steps' : NUM_STEPS,
             'optimizer' : Adam(),
             'seed' : int(time.time() * 10000),
-            'starting_height' : 20,
+            'env_ctor_params' : {
+                },
             'target_model_update' : 10e-3,
             })
         self.agent = None
         self.model = None
         self.env = None
+        self.env_cls = env_cls
 
-    @staticmethod
-    def _createModel():
+    def _createModel(self):
         model = Sequential([
-            Flatten(input_shape = (1,DumbMars1DEnvironment.NUM_SENSORS,)),
+            Flatten(input_shape = (1,) + self.env_cls.NUM_SENSORS),
             Dense(20, activation='relu'),
             Dense(20, activation='relu'),
-            Dense(DumbMars1DEnvironment.NUM_ACTIONS, activation = 'linear')
+            Dense(self.env_cls.NUM_ACTIONS, activation = 'linear')
             ])
         return model
 
     def _getTrainPolicy(self):
         config = self.config['epsilon']
-        if isinstance(config, float) or isinstance(config, int):
+        if isinstance(config, (float, int)):
             assert 0 <= config <= 1, 'Epsilon must be in [0, 1]'
             return EpsGreedyQPolicy(eps = config)
         if isinstance(config, tuple):
@@ -154,13 +156,12 @@ class Runner(Configurable):
 
 
     def createAgent(self):
-        self.model = Runner._createModel()
+        self.model = self._createModel()
         memory = SequentialMemory(limit = 50000, window_length = 1)
-        policy = EpsGreedyQPolicy(eps = self.config['epsilon'])
         test_policy = EpsGreedyQPolicy(eps = 0)
 
         self.agent = DQNAgent(model = self.model,
-                              nb_actions = DumbMars1DEnvironment.NUM_ACTIONS,
+                              nb_actions = self.env_cls.NUM_ACTIONS,
                               memory = memory,
                               nb_steps_warmup = 50,
                               target_model_update = \
@@ -171,7 +172,7 @@ class Runner(Configurable):
                               enable_double_dqn = self.config['double_dqn'])
         self.agent.compile(self.config['optimizer'], metrics = ['mae'])
 
-        self.env = DumbMars1DEnvironment(self.config['starting_height'])
+        self.env = self.env_cls(**self.config['env_ctor_params'])
 
     def fit(self, num_steps = None):
         assert self.agent is not None, "createAgent() should be run before fit"
@@ -212,7 +213,7 @@ class Runner(Configurable):
 
 def main():
     num_epoch = int(sys.argv[1])
-    runner = Runner()
+    runner = Runner(GomokuEnvironment)
     runner.config['epsilon'] = (0.3, 0., 100000)
     runner.createAgent()
     runner.fit(num_epoch)

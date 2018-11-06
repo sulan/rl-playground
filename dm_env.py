@@ -112,7 +112,7 @@ class DumbMarsEnvironment (Env):
 
 class DumbMars1DEnvironment(DumbMarsEnvironment):
     NUM_ACTIONS = 3
-    NUM_SENSORS = 3
+    NUM_SENSORS = (3,)
 
     def __init__ (self,height):
         super(DumbMars1DEnvironment, self).__init__(1)
@@ -162,7 +162,7 @@ class DumbMars2DEnvironment(DumbMarsEnvironment):
     #   - change rotation by (action / 3 - MAX_TURN) degrees
     NUM_ACTIONS = 3 * (2 * MAX_TURN + 1)
     # horizontal pos, height, hSpeed, vSpeed, rotation, acceleration
-    NUM_SENSORS = 6
+    NUM_SENSORS = (6,)
     # The direction of the acceleration is the vertical axis of the ship, ie.
     # it is rotated from the true vertical by rotation
 
