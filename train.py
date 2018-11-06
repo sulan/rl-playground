@@ -3,8 +3,9 @@ import numpy as np
 import h5py
 
 from keras.models import Sequential
-from keras.layers import Dense, Activation, Flatten
+from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape
 from keras.optimizers import RMSprop, Adam
+from keras.utils import CustomObjectScope
 
 from rl.agents.dqn import DQNAgent
 from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
@@ -14,6 +15,7 @@ import rl.callbacks
 from config_parser import ConfigParser
 from dm_env import DumbMars1DEnvironment
 from gomoku_env import GomokuEnvironment
+from gomoku_conv import GomokuConv
 
 
 CONFIG = ConfigParser('./config.json')
@@ -115,14 +117,15 @@ class Runner(Configurable):
     def __init__(self, env_cls):
         super().__init__({
             'double_dqn' : False,
+            'env_ctor_params' : {
+                },
             'epsilon' : 0.3,
             'gamma' : 0.99,
             'measurement_name' : 'default',
+            'model_type' : 'dense',
             'num_steps' : NUM_STEPS,
             'optimizer' : Adam(),
             'seed' : int(time.time() * 10000),
-            'env_ctor_params' : {
-                },
             'target_model_update' : 10e-3,
             })
         self.agent = None
@@ -131,12 +134,31 @@ class Runner(Configurable):
         self.env_cls = env_cls
 
     def _createModel(self):
-        model = Sequential([
-            Flatten(input_shape = (1,) + self.env_cls.NUM_SENSORS),
-            Dense(20, activation='relu'),
-            Dense(20, activation='relu'),
-            Dense(self.env_cls.NUM_ACTIONS, activation = 'linear')
-            ])
+        if self.config['model_type'] == 'dense':
+            model = Sequential([
+                Flatten(input_shape = (1,) + self.env_cls.NUM_SENSORS),
+                Dense(20, activation='relu'),
+                Dense(20, activation='relu'),
+                Dense(self.env_cls.NUM_ACTIONS, activation = 'linear')
+                ])
+        elif self.config['model_type'] == 'gomoku':
+            model = Sequential([
+                Reshape(target_shape = self.env_cls.NUM_SENSORS,
+                        input_shape = (1,) + self.env_cls.NUM_SENSORS),
+                GomokuConv(filters = 64, kernel_size = 9),
+                Activation('relu'),
+                Conv2D(32, (5,5), padding = 'same',
+                       data_format = 'channels_first', activation = 'relu'),
+                Conv2D(16, (5,5), padding = 'same',
+                       data_format = 'channels_first', activation = 'relu'),
+                Conv2D(8, (5,5), padding = 'same',
+                       data_format = 'channels_first', activation = 'relu'),
+                Conv2D(1, (1,1), padding = 'same',
+                       data_format = 'channels_first', activation = 'linear'),
+                Flatten(),
+                ])
+        else:
+            raise ValueError(self.config['architecture'])
         return model
 
     def _getTrainPolicy(self):
@@ -160,17 +182,18 @@ class Runner(Configurable):
         memory = SequentialMemory(limit = 50000, window_length = 1)
         test_policy = EpsGreedyQPolicy(eps = 0)
 
-        self.agent = DQNAgent(model = self.model,
-                              nb_actions = self.env_cls.NUM_ACTIONS,
-                              memory = memory,
-                              nb_steps_warmup = 50,
-                              target_model_update = \
-                                  self.config['target_model_update'],
-                              gamma = self.config['gamma'],
-                              policy = self._getTrainPolicy(),
-                              test_policy = test_policy,
-                              enable_double_dqn = self.config['double_dqn'])
-        self.agent.compile(self.config['optimizer'], metrics = ['mae'])
+        with CustomObjectScope({'GomokuConv' : GomokuConv}):
+            self.agent = DQNAgent(model = self.model,
+                                  nb_actions = self.env_cls.NUM_ACTIONS,
+                                  memory = memory,
+                                  nb_steps_warmup = 50,
+                                  target_model_update = \
+                                      self.config['target_model_update'],
+                                  gamma = self.config['gamma'],
+                                  policy = self._getTrainPolicy(),
+                                  test_policy = test_policy,
+                                  enable_double_dqn = self.config['double_dqn'])
+            self.agent.compile(self.config['optimizer'], metrics = ['mae'])
 
         self.env = self.env_cls(**self.config['env_ctor_params'])
 
@@ -214,11 +237,13 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner(GomokuEnvironment)
-    runner.config['epsilon'] = (0.3, 0., 100000)
+    runner.config['epsilon'] = (0.3, 0., 500000)
+    runner.config['model_type'] = 'gomoku'
     runner.createAgent()
     runner.fit(num_epoch)
     m, v = runner.test()
     print('Test result: {} (+/- {})'.format(m, v))
+    runner.model.save('trained_model.hdf5')
 
 
 if __name__ == "__main__":

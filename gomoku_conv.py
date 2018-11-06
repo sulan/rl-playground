@@ -3,6 +3,7 @@ import numpy as np
 from keras import backend as K
 from keras.engine.topology import Layer
 from keras.engine.base_layer import InputSpec
+from keras import initializers, regularizers
 
 class GomokuConv(Layer):
     """
@@ -10,16 +11,14 @@ class GomokuConv(Layer):
     diagonals and the middle row/column.
     """
 
-    def __init__(self, filters,
+    def __init__(self, filters, kernel_size,
                  kernel_initializer = 'glorot_uniform',
                  bias_initializer = 'zeros',
                  **kwargs):
         super().__init__(**kwargs)
         self.num_filters = filters
-        self.kernel_initializer = kernel_initializer
-        self.bias_initializer = bias_initializer
-        # Kernel size is fixed for now
-        kernel_size = 9
+        self.kernel_initializer = initializers.get(kernel_initializer)
+        self.bias_initializer = initializers.get(bias_initializer)
         if isinstance(kernel_size, int):
             self.kernel_shape = (kernel_size, kernel_size)
         else:
@@ -41,7 +40,7 @@ class GomokuConv(Layer):
             initializer = self.kernel_initializer)
         self.bias = self.add_weight(
             name = 'bias',
-            shape = (self.num_filters,),
+            shape = (self.num_filters * 8,),
             initializer = self.bias_initializer)
         mask = np.zeros(self.kernel_shape)
         mask[self.kernel_shape[0] // 2, :] = 1
@@ -49,8 +48,7 @@ class GomokuConv(Layer):
         np.fill_diagonal(mask, 1)
         mask[range(self.kernel_shape[0]),
              range(self.kernel_shape[1] - 1, -1, -1)] = 1
-        mask = np.array([mask] * 2)
-        mask.shape = self.kernel_shape + (2, self.num_filters)
+        mask.shape = self.kernel_shape + (1, 1)
         self.mask = K.constant(mask)
         super().build(input_shape)
 
@@ -95,3 +93,13 @@ class GomokuConv(Layer):
         output_shape = list(input_shape)
         output_shape[1] = self.num_filters * 8
         return tuple(output_shape)
+
+    def get_config(self):
+        config = {
+            'filters': self.num_filters,
+            'kernel_size': self.kernel_shape,
+            'kernel_initializer': initializers.serialize(self.kernel_initializer),
+            'bias_initializer': initializers.serialize(self.bias_initializer),
+        }
+        base_config = super().get_config()
+        return dict(list(base_config.items()) + list(config.items()))
