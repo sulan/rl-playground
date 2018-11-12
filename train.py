@@ -15,7 +15,7 @@ import rl.callbacks
 from config_parser import ConfigParser
 from dm_env import DumbMars1DEnvironment
 from gomoku_env import GomokuEnvironment
-from gomoku_conv import GomokuConv
+from gomoku_conv import GomokuConv, GomokuProcessor
 
 
 CONFIG = ConfigParser('./config.json')
@@ -157,20 +157,27 @@ class Runner(Configurable):
             model = Sequential([
                 Reshape(target_shape = self.env_cls.NUM_SENSORS,
                         input_shape = (1,) + self.env_cls.NUM_SENSORS),
-                GomokuConv(filters = 64, kernel_size = 9),
+                GomokuConv(filters = 128, kernel_size = 9, use_bias = False),
+                BatchNormalization(axis = 1),
+                Activation('relu'),
+                Conv2D(64, (5,5), padding = 'same',
+                       data_format = 'channels_first', use_bias = False),
+                BatchNormalization(axis = 1),
                 Activation('relu'),
                 Conv2D(32, (5,5), padding = 'same',
-                       data_format = 'channels_first', activation = 'relu'),
+                       data_format = 'channels_first', use_bias = False),
+                BatchNormalization(axis = 1),
+                Activation('relu'),
                 Conv2D(16, (5,5), padding = 'same',
-                       data_format = 'channels_first', activation = 'relu'),
-                Conv2D(8, (5,5), padding = 'same',
-                       data_format = 'channels_first', activation = 'relu'),
+                       data_format = 'channels_first', use_bias = False),
+                BatchNormalization(axis = 1),
+                Activation('relu'),
                 Conv2D(1, (1,1), padding = 'same',
                        data_format = 'channels_first', activation = 'linear'),
                 Flatten(),
                 ])
         else:
-            raise ValueError(self.config['architecture'])
+            raise ValueError(self.config['model_type'])
         return model
 
     def _getTrainPolicy(self):
@@ -197,6 +204,8 @@ class Runner(Configurable):
             self.model = self._createModel()
         memory = SequentialMemory(limit = 50000, window_length = 1)
         test_policy = EpsGreedyQPolicy(eps = 0)
+        processor = GomokuProcessor() if self.config['model_type'] == 'gomoku' \
+            else None
 
         with CustomObjectScope({'GomokuConv' : GomokuConv}):
             self.agent = DQNAgent(model = self.model,
@@ -208,6 +217,7 @@ class Runner(Configurable):
                                   gamma = self.config['gamma'],
                                   policy = self._getTrainPolicy(),
                                   test_policy = test_policy,
+                                  processor = processor,
                                   enable_double_dqn = self.config['double_dqn'])
             self.agent.compile(self.config['optimizer'], metrics = ['mae'])
 
