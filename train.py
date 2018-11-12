@@ -69,6 +69,8 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                                                          maxshape = (None,),
                                                          dtype = 'f4')
         self.num_steps = 0
+        self.percent = 0
+        self.max_num_steps = max_num_steps
         self.loss = self.group.create_dataset('loss', shape = (max_num_steps,),
                                               dtype = 'f4')
         self.first_observation = None
@@ -82,6 +84,13 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         cur_loss = logs['metrics'][0]
         self.loss[self.num_steps] = cur_loss
         self.num_steps += 1
+        new_percent = (self.num_steps * 100) // self.max_num_steps
+        # Print progress
+        if new_percent > self.percent:
+            self.percent = new_percent
+            print(self.percent // 10 if self.percent % 10 == 0 else '.',
+                  end = '' if self.percent < 100 else '\n', flush = True)
+        # Save first state
         if step == 0:
             self.first_observation = np.array(logs['observation'])
             # It needs to be in the right shape for prediction
