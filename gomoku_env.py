@@ -47,15 +47,33 @@ class GomokuEnvironment(Env):
     # positions, the second for the black positions
     NUM_SENSORS = (2, BOARD_SIZE[0], BOARD_SIZE[1])
 
-    def __init__(self):
+    def __init__(self, opponents, opponent_distribution):
         self.state = None
         self.lastReward = None
 
         self.board = board.Board(BOARD_SIZE[0], BOARD_SIZE[1])
-        self.opponent = player.a_easy.Easy(board.black)
+        # Current opponent
+        self.opponent = None
+        self.opponents = self._load_opponents(opponents)
+        self.opponent_distribution = opponent_distribution
         self.gui = PseudoGUI(self.board)
 
         self._seed()
+
+    @staticmethod
+    def _load_opponents(opponents):
+        def load_opponent(opponent):
+            if opponent == 'easy':
+                return player.a_easy.Easy(board.black)
+            if opponent == 'medium':
+                return player.b_medium.Medium(board.black)
+            if opponent == 'hard':
+                return player.c_hard.Hard(board.black)
+            assert isinstance(opponent, object), \
+                'Keras models as opponents are not yet supported.'
+            return opponent
+
+        return [load_opponent(opponent) for opponent in opponents]
 
     def _get_state(self):
         return np.stack([self.board.board == board.white,
@@ -64,6 +82,8 @@ class GomokuEnvironment(Env):
     def _reset(self):
         self.board.reset()
         self.lastReward = None
+        self.opponent = np.random.choice(self.opponents,
+                                         p = self.opponent_distribution)
         return self._get_state()
 
     def _step(self, action):

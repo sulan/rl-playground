@@ -265,6 +265,18 @@ def main():
     runner = Runner(GomokuEnvironment)
     runner.config['epsilon'] = (0.3, 0., 500000)
     runner.config['model_type'] = 'gomoku'
+    runner.config['env_ctor_params'] = {
+        'opponents' : [
+            'easy',
+            'medium',
+            'hard',
+            ],
+        'opponent_distribution' : [
+            0.99,
+            0.01,
+            0,
+            ],
+        }
     runner.createAgent()
     runner.fit(num_epoch)
     m, v = runner.test()
