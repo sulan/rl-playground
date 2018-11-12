@@ -2,8 +2,8 @@ import json, time, sys
 import numpy as np
 import h5py
 
-from keras.models import Sequential
-from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape
+from keras.models import Sequential, load_model
+from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization
 from keras.optimizers import RMSprop, Adam
 from keras.utils import CustomObjectScope
 
@@ -20,8 +20,11 @@ from gomoku_conv import GomokuConv
 
 CONFIG = ConfigParser('./config.json')
 NUM_STEPS = CONFIG.getOption('num_steps', 100)
+# Wether to use the verbose output in keras-rl
 VERBOSE_TRAINING = CONFIG.getOption('verbose_training', 0)
 OUTPUT_DATA_FILE = CONFIG.getOption('output_data_file', 'train.out.hdf5')
+# If not None, the Runner will load this file at agent creation
+INPUT_MODEL = CONFIG.getOption('input_model', None)
 
 
 class PrettyPrintEncoder(json.JSONEncoder):
@@ -55,7 +58,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         """
         Opens the file for writing (deletes any current content)
         """
-        self.file = h5py.File(file_name, 'a')
+        self.file = h5py.File(file_name, 'w')
         self.group = self.file.create_group(measurement_name)
         self.episode_rewards_size = 8
         self.num_episodes = self.group.create_dataset('num_episodes',
@@ -178,7 +181,11 @@ class Runner(Configurable):
 
 
     def createAgent(self):
-        self.model = self._createModel()
+        if INPUT_MODEL is not None:
+            with CustomObjectScope({'GomokuConv' : GomokuConv}):
+                self.model = load_model(INPUT_MODEL)
+        else:
+            self.model = self._createModel()
         memory = SequentialMemory(limit = 50000, window_length = 1)
         test_policy = EpsGreedyQPolicy(eps = 0)
 
