@@ -49,7 +49,8 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
     Statistics collected:
         - loss (TD-error in one update)
-        - reward at the end of each training episode
+        - the step index at the end of each episode
+        - reward at the end of each episode
         - reward prediction (predicted V value for the starting state after
           each episode)
     """
@@ -63,6 +64,10 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         self.episode_rewards_size = 8
         self.num_episodes = self.group.create_dataset('num_episodes',
                                                       shape = (1,),
+                                                      dtype = 'i8')
+        self.episode_ends = self.group.create_dataset('episode_ends',
+                                                      shape = (self.episode_rewards_size,),
+                                                      maxshape = (None,),
                                                       dtype = 'i8')
         self.episode_rewards = self.group.create_dataset('episode_rewards',
                                                          shape = (self.episode_rewards_size,),
@@ -101,6 +106,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         while self.episode_rewards_size <= episode:
             self.episode_rewards_size *= 2
         self.episode_rewards.resize(self.episode_rewards_size, axis = 0)
+        self.episode_ends.resize(self.episode_rewards_size, axis = 0)
         self.reward_prediction.resize(self.episode_rewards_size, axis = 0)
 
 
@@ -115,6 +121,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         cur_reward = logs['episode_reward']
         self.episode_rewards[episode] = cur_reward
         self.num_episodes[0] = max(episode + 1, num_episodes)
+        self.episode_ends[episode] = self.num_steps
 
         agent = self.model
         model = agent.model
