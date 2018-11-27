@@ -17,6 +17,8 @@ from dm_env import DumbMars1DEnvironment
 from gomoku_env import GomokuEnvironment
 from gomoku_conv import GomokuConv, GomokuProcessor
 
+from kaiki_model import create_kaiki_model
+
 
 CONFIG = ConfigParser('./config.json')
 NUM_STEPS = CONFIG.getOption('num_steps', 100)
@@ -192,28 +194,7 @@ class Runner(Configurable):
                 Dense(self.env_cls.NUM_ACTIONS, activation = 'linear')
                 ])
         elif self.config['model_type'] == 'gomoku':
-            model = Sequential([
-                Reshape(target_shape = self.env_cls.NUM_SENSORS,
-                        input_shape = (1,) + self.env_cls.NUM_SENSORS),
-                GomokuConv(filters = 128, kernel_size = 9, use_bias = False),
-                BatchNormalization(axis = 1),
-                Activation('relu'),
-                Conv2D(64, (5,5), padding = 'same',
-                       data_format = 'channels_first', use_bias = False),
-                BatchNormalization(axis = 1),
-                Activation('relu'),
-                Conv2D(32, (5,5), padding = 'same',
-                       data_format = 'channels_first', use_bias = False),
-                BatchNormalization(axis = 1),
-                Activation('relu'),
-                Conv2D(16, (5,5), padding = 'same',
-                       data_format = 'channels_first', use_bias = False),
-                BatchNormalization(axis = 1),
-                Activation('relu'),
-                Conv2D(1, (1,1), padding = 'same',
-                       data_format = 'channels_first', activation = 'linear'),
-                Flatten(),
-                ])
+            model = create_kaiki_model(self.env_cls.NUM_SENSORS)
         else:
             raise ValueError(self.config['model_type'])
         return model
