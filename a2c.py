@@ -62,7 +62,7 @@ class A2C:
             """
             raise NotImplementedError()
 
-    class AbstractActor(A2C.Actor):
+    class AbstractActor(Actor):
         """
         An A2C Actor that builds up a multistep trajectory
         """
@@ -73,20 +73,23 @@ class A2C:
             self.done = None
 
         def build_trajectory(self, env, max_trajectory_length, callbacks):
+            assert max_trajectory_length > 0, \
+                'build_trajectory assumes at least one step'
             self.trajectory = []
             self.done = False
-            for t in range(self.trajectory_length):
-                if t >= max_trajectory_length:
-                    break
-                if last_observation is None:
-                    last_observation = deepcopy(env.reset())
-                action = self.get_action(last_observation)
+            if self.last_observation is None:
+                self.last_observation = deepcopy(env.reset())
+            for t in range(min(self.trajectory_length, max_trajectory_length)):
+                action = self.get_action(self.last_observation)
                 observation, reward, self.done, info = env.step(action)
                 observation = deepcopy(observation)
-                self.trajectory.append((last_observation, action, reward))
+                self.trajectory.append((self.last_observation, action, reward))
+                self.last_observation = observation
                 if self.done:
                     break
-                last_observation = None if self.done else observation
+            self.trajectory.append(self.last_observation)
+            if self.done:
+                self.last_observation = None
             return self.done, self.trajectory
 
         def get_trajectory(self):
@@ -113,7 +116,7 @@ class A2C:
         Learner of the Advantage Actor Critic algorithm, ie. the part of the
         implementation that calculates the new parameters.
         """
-        def backward(self, trajectory):
+        def backward(self, trajectories):
             """
             Update the parameters based on a single trajectory.
             """
@@ -129,17 +132,17 @@ class A2C:
             """
             raise NotImplementedError()
 
-        def update_parameters(self, trajectories):
-            """
-            Update the parameters based on the trajectories from the actors.
+        # def update_parameters(self, trajectories):
+        #     """
+        #     Update the parameters based on the trajectories from the actors.
 
-            # Arguments:
-            trajectories: Contains a trajectory from each learner.
-            """
-            for trajectory in trajectories:
-                self.backward(trajectory)
+        #     # Arguments:
+        #     trajectories: Contains a trajectory from each learner.
+        #     """
+        #     for trajectory in trajectories:
+        #         self.backward(trajectory)
 
-            # TODO accumulate and return metrics
+        #     # TODO accumulate and return metrics
 
     def __init__(self, learner, num_actors = 1):
         self.training = False
@@ -198,16 +201,18 @@ class A2C:
         actors = [self.learner.create_actor(i) for i in range(self.num_actors)]
         envs = [env_factory(i) for i in range(self.num_actors)]
 
-        while True:
+        while self.step < nb_steps:
             # TODO callbacks
             max_horizon = nb_steps - self.step
-            trajectories = [actor.build_trajectory(env, max_horizon)
+            trajectories = [actor.build_trajectory(env, max_horizon, callbacks)
                             for actor, env in zip(actors, envs)]
 
-            # TODO how to accumulate step?
+            # TODO how to increase step?
             # Currently, the length of the longest trajectory is added
+            # Which means that in overall, all the actors will do (much) fewer
+            # steps
             self.step += len(max(trajectories, key = len))
 
-            self.learner.update_parameters(trajectories)
+            self.learner.backward(trajectories)
 
         return history
