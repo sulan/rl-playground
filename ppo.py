@@ -130,11 +130,14 @@ class PPOLearner(A2C.Learner):
             cur_trajectory_length = len(actions)
             # State values for the current trajectory (not including the state
             # at the end)
-            V = np.append(V_old.flatten()[trajectory_start:len(actions)],
-                          0 if done else end_value)
+            V = np.append(
+                V_old.flatten()[trajectory_start:
+                                trajectory_start + cur_trajectory_length],
+                0 if done else end_value)
             deltas = rewards + self.gamma * V[1:] - V[:-1]
             advantages = np.zeros((cur_trajectory_length, self.nb_actions))
             masks = np.zeros_like(advantages)
+
             next_advantage = 0
             V_targ = V[:-1]
             for delta, action, advantage, mask, V_targ_elem in zip(
@@ -147,13 +150,15 @@ class PPOLearner(A2C.Learner):
                     delta + self.gamma * self.lam * next_advantage
                 mask[action] = 1
                 V_targ_elem += next_advantage
+
             advantage_batch = np.append(advantage_batch, advantages, axis = 0)
-            trajectory_start += cur_trajectory_length
             masks = np.zeros((cur_trajectory_length, self.nb_actions))
             masks[range(cur_trajectory_length), actions] = 1
             mask_batch = np.append(mask_batch, masks, axis = 0)
             V_targ.shape = (-1, 1)
             V_targ_batch = np.append(V_targ_batch, V_targ, axis = 0)
+
+            trajectory_start += cur_trajectory_length
         mask_batch = np.array(mask_batch)
         dummy_target = np.zeros((states.shape[0], 1))
         self.trainable_model.fit([states, pi_old, V_targ_batch, advantage_batch,

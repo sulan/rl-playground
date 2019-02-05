@@ -1,4 +1,5 @@
 import numpy as np
+np.random.seed(1)
 
 from keras.models import Sequential, Model
 from keras.layers import Dense, Flatten
@@ -22,11 +23,16 @@ def get_model():
 def main():
     model = get_model()
     learner = PPOLearner(model, 10, fit_epochs = 10)
-    agent = A2C(learner)
+    agent = A2C(learner, num_actors = 2)
     agent.compile(optimizer = 'sgd')
     def env_factory(_):
         return DumbMars1DEnvironment(2)
     agent.fit(env_factory, 10)
+    history = agent.test(env_factory, 1)
+    print(history.history)
+    agent.fit(env_factory, 10000)
+    history = agent.test(env_factory, 1)
+    print(history.history)
 
 if __name__ == "__main__":
     main()

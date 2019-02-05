@@ -20,6 +20,11 @@ class A2C:
         Actor of the Advantage Actor Critic algorithm, ie. the part of the
         implementation that interacts with (an instance of) the environment.
         """
+
+        def __init__(self):
+            self.episode = -1
+            self.episode_step = 0
+
         def get_action(self, observation):
             """
             Choose an action for the current observation.
@@ -67,6 +72,7 @@ class A2C:
         An A2C Actor that builds up a multistep trajectory
         """
         def __init__(self, trajectory_length):
+            super().__init__()
             self.trajectory_length = trajectory_length
             self.last_observation = None
             self.trajectory = None
@@ -78,13 +84,27 @@ class A2C:
             self.trajectory = []
             self.done = False
             if self.last_observation is None:
+                # Start new episode
                 self.last_observation = deepcopy(env.reset())
-            for t in range(min(self.trajectory_length, max_trajectory_length)):
+                self.episode += 1
+            for _ in range(min(self.trajectory_length, max_trajectory_length)):
+                callbacks.on_step_begin(self.episode_step)
                 action = self.get_action(self.last_observation)
                 observation, reward, self.done, info = env.step(action)
                 observation = deepcopy(observation)
                 self.trajectory.append((self.last_observation, action, reward))
                 self.last_observation = observation
+
+                step_logs = {
+                    'action': action,
+                    'observation': observation,
+                    'reward': reward,
+                    'episode': self.episode,
+                    'info': info,
+                    }
+                callbacks.on_step_end(self.episode_step, step_logs)
+                self.episode_step += 1
+
                 if self.done:
                     break
             self.trajectory.append(self.last_observation)
@@ -197,10 +217,12 @@ class A2C:
         history = History()
         callbacks.append(history)
         callbacks = CallbackList(callbacks)
+        # TODO: how to tell the progress of the different actors apart?
 
         actors = [self.learner.create_actor(i) for i in range(self.num_actors)]
         envs = [env_factory(i) for i in range(self.num_actors)]
 
+        self.step = 0
         while self.step < nb_steps:
             # TODO callbacks
             max_horizon = nb_steps - self.step
@@ -214,5 +236,80 @@ class A2C:
             self.step += len(max(trajectories, key = len))
 
             self.learner.backward(trajectories)
+
+        return history
+
+    def test(self, env_factory, nb_episodes, action_repetition = 1,
+             callbacks = None, nb_max_episode_steps = None):
+        """
+        Tests the agent on the given environment.
+
+        Only one actor is tested on one environment instance.
+
+        # Arguments:
+        env_factory (`lambda integer: env`): A factory function that gives an
+            new environment instance. Its parameter is the index of the
+            instance; this will be 0.
+        nb_episodes (integer): Number of training episodes to perform.
+        action_repetition (integer): Number of times the agent repeats the same
+            action without observing the environment again. Setting this to a
+            value > 1 can be useful if a single action only has a very small
+            effect on the environment.
+        callbacks (list of `keras.callbacks.Callback` or
+            `rl.callbacks.Callback` instances): List of callbacks to apply
+            during training.
+        nb_max_episode_steps (integer): Number of steps per episode that the
+            agent performs before automatically resetting the environment. Set
+            to `None` if each episode should run (potentially indefinitely)
+            until the environment signals a terminal state.
+        """
+        if not self.compiled:
+            raise RuntimeError(
+                'Your tried to test your agent but it hasn\'t been compiled '
+                + 'yet. Please call `compile()` before `fit()`.')
+        if action_repetition < 1:
+            raise ValueError(
+                'action_repetition must be >= 1, is {}'.format(
+                    action_repetition))
+
+        self.training = False
+        callbacks = [] if not callbacks else callbacks[:]
+        history = History()
+        callbacks.append(history)
+        callbacks = CallbackList(callbacks)
+
+        actor = self.learner.create_actor(0)
+        env = env_factory(0)
+
+        self.step = 0
+
+        # TODO remove the double counting of episodes (here and in the Actor)
+        callbacks.on_train_begin()
+        for episode in range(nb_episodes):
+            if nb_max_episode_steps is None:
+                # Collect a relatively long trajectory, then continue if not
+                # done yet
+                done = False
+                episode_reward = 0
+                episode_step = 0
+                while not done:
+                    done, trajectory = actor.build_trajectory(env, 1000,
+                                                              callbacks)
+                    episode_reward += sum([r for s,a,r in trajectory[:-1]])
+                    episode_step += len(trajectory) - 1
+            else:
+                done, trajectory = actor.build_trajectory(
+                    env, nb_max_episode_steps, callbacks)
+                episode_reward = sum([r for s,a,r in trajectory[:-1]])
+                episode_step = len(trajectory) - 1
+
+            self.step += episode_step
+            episode_logs = {
+                'episode_reward': episode_reward,
+                'episode_steps': episode_step,
+                }
+            callbacks.on_episode_end(episode, episode_logs)
+
+        callbacks.on_train_end()
 
         return history
