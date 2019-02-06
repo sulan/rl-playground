@@ -68,8 +68,8 @@ class PPOLearner(A2C.Learner):
             vf_loss = K.square(V - V_target)
             L_clip = K.sum(L_clip * mask, axis = -1)
             # Negative because Keras minimises the loss
-            return -(L_clip + self.vfloss_coeff * vf_loss
-                     + self.entropy_coeff * entropy)
+            return (- L_clip + self.vfloss_coeff * vf_loss
+                    - self.entropy_coeff * entropy)
 
         # action and value
         pi = self.model.output[0]
