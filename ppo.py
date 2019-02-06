@@ -17,8 +17,8 @@ class PolicyGradientActor(A2C.AbstractActor):
 
     # TODO: put softmax here
 
-    def __init__(self, model, trajectory_length):
-        super().__init__(trajectory_length)
+    def __init__(self, actor_id, model, trajectory_length):
+        super().__init__(actor_id, trajectory_length)
         self.model = model
         self.nb_actions = model.output._keras_shape[1]
 
@@ -26,6 +26,17 @@ class PolicyGradientActor(A2C.AbstractActor):
         distribution = self.model.predict(observation.reshape(1, 1,-1))[0]
         action = np.random.choice(self.nb_actions, p = distribution)
         return action
+
+def generate_episode_counter():
+    """
+    Returns with a simple counter function to used in episode index generation.
+    """
+    new_episode_index = -1
+    def get_new_episode_index():
+        nonlocal new_episode_index
+        new_episode_index += 1
+        return new_episode_index
+    return get_new_episode_index
 
 class PPOLearner(A2C.Learner):
     """
@@ -101,7 +112,9 @@ class PPOLearner(A2C.Learner):
     def create_actor(self, i):
         actor_model = Model(inputs = self.model.inputs,
                             outputs = self.model.outputs[0])
-        return PolicyGradientActor(actor_model, self.trajectory_length)
+        actor = PolicyGradientActor(i, actor_model, self.trajectory_length)
+        actor.get_new_episode_index = generate_episode_counter()
+        return actor
 
     def backward(self, trajectories):
         assert self.compiled, 'PPOLearner must be compiled before training'
