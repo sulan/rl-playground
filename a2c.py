@@ -103,18 +103,12 @@ class A2C:
             self.trajectory = []
             self.done = False
             if self.last_observation is None:
-                if self.episode is not None:
-                    episode_logs = {
-                        'actor': self.actor_id,
-                        'episode_reward': self.episode_reward,
-                        'nb_episode_steps': self.episode_step,
-                        }
-                    callbacks.on_episode_end(self.episode, episode_logs)
                 # Start new episode
                 self.last_observation = deepcopy(env.reset())
                 self.episode = self.get_new_episode_index()
                 self.episode_reward = 0
                 self.episode_step = 0
+
             for _ in range(min(self.trajectory_length, max_trajectory_length)):
                 callbacks.on_step_begin(self.episode_step)
                 action = self.get_action(self.last_observation)
@@ -136,6 +130,12 @@ class A2C:
                 self.episode_reward += reward
 
                 if self.done:
+                    episode_logs = {
+                        'actor': self.actor_id,
+                        'episode_reward': self.episode_reward,
+                        'nb_episode_steps': self.episode_step,
+                        }
+                    callbacks.on_episode_end(self.episode, episode_logs)
                     break
             self.trajectory.append(self.last_observation)
             if self.done:
@@ -324,8 +324,19 @@ class A2C:
                 done, trajectory = actor.build_trajectory(
                     env, nb_max_episode_steps, callbacks)
                 episode_step = len(trajectory) - 1
+                episode_reward = sum(r for s,a,r in trajectory[:-1])
 
             self.step += episode_step
+
+            # TODO do this for fit also
+            if not done:
+                # Logs of the final (not finished) episode
+                episode_logs = {
+                    'episode_reward': episode_reward,
+                    'nb_episode_steps': episode_step,
+                    'nb_steps': self.step,
+                }
+                callbacks.on_episode_end(actor.episode, episode_logs)
 
         callbacks.on_train_end()
 

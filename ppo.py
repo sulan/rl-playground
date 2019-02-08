@@ -118,18 +118,20 @@ class PPOLearner(A2C.Learner):
 
     def backward(self, trajectories):
         assert self.compiled, 'PPOLearner must be compiled before training'
-        # Without the ends of the trajectories
-        # trajectory: list of (done, trajectory)
+        # Without the ends (final state) of the trajectories
+        # trajectories: list of (done, trajectory)
         states = sum(
-            ([transition[0] for transition in trajectory[1][:-1]]
-             for trajectory in trajectories), [])
+            ([transition[0] for transition in trajectory[:-1]]
+             for _, trajectory in trajectories), [])
         states = np.array(states)
         states.shape = (-1, 1) + states.shape[1:]
         # The states and the values at them at the end
-        end_states = np.array([trajectory[1][-1] for trajectory in trajectories])
+        end_states = np.array(
+            [trajectory[-1] for _, trajectory in trajectories])
         end_states.shape = (-1, 1) + end_states.shape[1:]
-        end_values = self.cloned_model.predict(end_states)[1]
+        _, end_values = self.cloned_model.predict(end_states)
         pi_old, V_old = self.cloned_model.predict(states)
+        V_old.shape = (-1,)
         # Calculate advantages for each trajectory, starting from the end
         trajectory_start = 0
         advantage_batch = np.zeros((0, self.nb_actions))
@@ -144,8 +146,8 @@ class PPOLearner(A2C.Learner):
             # State values for the current trajectory (not including the state
             # at the end)
             V = np.append(
-                V_old.flatten()[trajectory_start:
-                                trajectory_start + cur_trajectory_length],
+                V_old[trajectory_start:
+                      trajectory_start + cur_trajectory_length],
                 0 if done else end_value)
             deltas = rewards + self.gamma * V[1:] - V[:-1]
             advantages = np.zeros((cur_trajectory_length, self.nb_actions))
