@@ -104,9 +104,9 @@ def main():
                                maxshape = (None, 2), dtype = 'i1')
     num_episodes = 0
     while num_episodes < max_num_episodes:
-        new_states, new_actions = generate_some_plays(
-                min(100, max_num_episodes - num_episodes))
-        num_episodes += 1
+        num_new_episodes = min(100, max_num_episodes - num_episodes)
+        new_states, new_actions = generate_some_plays(num_new_episodes)
+        num_episodes += num_new_episodes
         new_l = len(new_states)
         if length[0] + new_l > max_length:
             while length[0] + new_l > max_length:
