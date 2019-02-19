@@ -1,1 +1,1 @@
-from lib import board, player
+from gomoku.lib import board, player

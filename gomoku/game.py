@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 from __future__ import print_function
-from lib import gui
+from gomoku.lib import gui
 
 class ErrorHandler(object):
     def __enter__(self):

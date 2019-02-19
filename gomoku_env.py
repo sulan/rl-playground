@@ -2,9 +2,9 @@ import numpy as np
 import gym_excerpt as gyme
 from rl.core import Env
 
-import gomoku.board as board
-import gomoku.player as player
-from gomoku.player import PseudoGUI
+import gomoku.lib.board as board
+import gomoku.lib.player as player
+from gomoku.lib.player import PseudoGUI
 
 from config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
