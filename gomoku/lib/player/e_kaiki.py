@@ -1,5 +1,6 @@
 from . import Player
 from ..board import black, white, empty, InvalidMoveError
+from .gomoku_conv import GomokuConv
 
 import numpy as np
 
@@ -17,7 +18,8 @@ class KaikiPlayer(Player):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.model = load_model(MODEL_FILE)
+        self.model = load_model(MODEL_FILE,
+                custom_objects = {'GomokuConv' : GomokuConv})
 
     def _make_move(self, gui):
         state = np.stack([gui.board.board == self.color,
