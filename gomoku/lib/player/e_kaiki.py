@@ -5,6 +5,7 @@ from .gomoku_conv import GomokuConv
 import numpy as np
 
 from keras.models import load_model
+import keras.backend as K
 
 from .config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
@@ -24,15 +25,15 @@ class KaikiPlayer(Player):
     def _make_move(self, gui):
         state = np.stack([gui.board.board == self.color,
                           gui.board.board == -self.color])
-        # TODO check shape
         state.shape = (1, 1, 2,) + tuple(BOARD_SIZE)
         action = self.model.predict(state)
         action = np.argmax(action[0])
-        #print(action)
-        #i, j = np.argmax(action, 0), np.argmax(action, 1)
         i, j = action // BOARD_SIZE[0], action % BOARD_SIZE[0]
         try:
             gui.board[i, j] = self.color
         except InvalidMoveError:
             print('Warning: Kaiki disregarded the rules.')
             self.random_move(gui)
+
+    def __del__(self):
+        K.clear_session()
