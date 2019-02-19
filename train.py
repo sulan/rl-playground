@@ -286,7 +286,7 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner(GomokuEnvironment)
-    runner.config['epsilon'] = (0.0, 0.000, 290000)
+    runner.config['epsilon'] = (0.1, 0.001, 290000)
     runner.config['model_type'] = 'gomoku'
     runner.config['double_dqn'] = True
     runner.config['env_ctor_params'] = {
@@ -296,9 +296,9 @@ def main():
             'hard',
             ],
         'opponent_distribution' : [
-            1.0,
-            0.0,
-            0.0,
+            0.3,
+            0.3,
+            0.4,
             ],
         }
     with CustomObjectScope({'loss': loss}):
