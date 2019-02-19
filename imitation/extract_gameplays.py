@@ -4,6 +4,7 @@ import h5py
 
 import gomoku.board as gboard
 import gomoku.player as player
+from gomoku.player import PseudoGUI
 
 from config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
@@ -30,24 +31,6 @@ class MyBoard(gboard.Board):
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
         self.last_action = np.array(key)
-
-class PseudoGUI:
-    """
-    GUI adapter for the board, needed for the engine
-
-    The engine accesses the state through a reference to the gui (that contains
-    the board state).
-    """
-
-    def __init__(self, board):
-        self.board = board
-        self.in_game = True
-
-    def renew_board(self):
-        pass
-
-    def highlight_lastmove(self):
-        pass
 
 def match(players):
     current_player_id = 0

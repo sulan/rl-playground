@@ -4,30 +4,13 @@ from rl.core import Env
 
 import gomoku.board as board
 import gomoku.player as player
+from gomoku.player import PseudoGUI
 
 from config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
 
 # Size of the board: [height, width]
 BOARD_SIZE = CONFIG.getOption('board_size', [15, 15])
-
-class PseudoGUI:
-    """
-    GUI adapter for the board, needed for the engine
-
-    The engine accesses the state through a reference to the gui (that contains
-    the board state).
-    """
-
-    def __init__(self, board):
-        self.board = board
-        self.in_game = True
-
-    def renew_board(self):
-        pass
-
-    def highlight_lastmove(self):
-        pass
 
 class GomokuEnvironment(Env):
     """

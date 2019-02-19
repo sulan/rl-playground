@@ -38,19 +38,19 @@ class Player(Playerlibrary):
             The game ``BoardGui`` as described in "gui.py"
 
         """
-        # gui.renew_board()
-        # if hasattr(gui.board, 'lastmove'):
-        #     gui.highlight_lastmove()
-        # gui.color_in_turn = self.color
-        # moves_left = gui.board.moves_left
+        gui.renew_board()
+        if hasattr(gui.board, 'lastmove'):
+            gui.highlight_lastmove()
+        gui.color_in_turn = self.color
+        moves_left = gui.board.moves_left
 
         self._make_move(gui)
 
-        # if not gui.in_game:
-        #     return
+        if not gui.in_game:
+            return
 
-        # if not moves_left - 1 == gui.board.moves_left:
-        #     raise InvalidMoveError('Player "%s" did not place a stone.' % self.name)
+        if not moves_left - 1 == gui.board.moves_left:
+            raise InvalidMoveError('Player "%s" did not place a stone.' % self.name)
 
     def _make_move(self, gui):
         "Override this function for specific players"
@@ -75,6 +75,25 @@ class Human(Player):
         while gui.board.moves_left == moves_left and gui.in_game:
             gui.update()
         gui.need_user_input = False
+
+class PseudoGUI:
+    """
+    GUI adapter for the board to use the AIs in headless mode
+
+    The engine accesses the state through a reference to the gui (that contains
+    the board state).
+    """
+
+    def __init__(self, board):
+        self.board = board
+        self.in_game = True
+
+    def renew_board(self):
+        pass
+
+    def highlight_lastmove(self):
+        pass
+
 
 
 
