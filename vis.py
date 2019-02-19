@@ -6,12 +6,12 @@ import h5py
 import matplotlib.pyplot as plt
 import pickle
 from scipy.signal import medfilt
-%matplotlib qt5
+#%matplotlib qt5
 #  1}}} #
 
 file_name = 'train.out.hdf5'
-file_name = '/tmp/results1/train.out.hdf5'
-file_name = '/tmp/l341b/meas/test-episode-test_20181116-2007/train.out.hdf5'
+#file_name = '/tmp/results1/train.out.hdf5'
+#file_name = '/tmp/l341b/meas/test-episode-test_20181116-2007/train.out.hdf5'
 #  Datasets {{{1 #
 f = h5py.File(file_name, 'r')
 g = f['default']
@@ -68,9 +68,9 @@ plt.show()
 #  }}} Plot # 
 
 #  Agent Memory {{{ #
-mem_name = '/tmp/results1/agent.memory'
-with open(mem_name, 'rb') as f:
-    mem = pickle.load(f)
+#mem_name = '/tmp/results1/agent.memory'
+#with open(mem_name, 'rb') as f:
+#    mem = pickle.load(f)
 #  }}} Agent Memory #
 
 #  GC {{{ # 

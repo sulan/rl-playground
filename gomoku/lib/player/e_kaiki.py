@@ -10,7 +10,7 @@ from .config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
 
 # Size of the board: [height, width]
-BOARD_SIZE = CONFIG.getOption('board_size', [15, 15])
+BOARD_SIZE = CONFIG.getOption('board_size', [16, 16])
 MODEL_FILE = CONFIG.input_model
 
 class KaikiPlayer(Player):
@@ -25,12 +25,14 @@ class KaikiPlayer(Player):
         state = np.stack([gui.board.board == self.color,
                           gui.board.board == -self.color])
         # TODO check shape
-        state.shape = (1, 1, 2,) + BOARD_SIZE
+        state.shape = (1, 1, 2,) + tuple(BOARD_SIZE)
         action = self.model.predict(state)
-        action = action[0]
+        action = np.argmax(action[0])
+        #print(action)
+        #i, j = np.argmax(action, 0), np.argmax(action, 1)
         i, j = action // BOARD_SIZE[0], action % BOARD_SIZE[0]
         try:
             gui.board[i, j] = self.color
         except InvalidMoveError:
             print('Warning: Kaiki disregarded the rules.')
-            self.random_move(self, gui)
+            self.random_move(gui)

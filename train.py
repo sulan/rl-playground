@@ -2,7 +2,7 @@ import json, time, sys
 import numpy as np
 import h5py
 
-from keras.models import Sequential, load_model
+from keras.models import Sequential, Model, load_model
 from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization
 from keras.optimizers import RMSprop, Adam
 from keras.utils import CustomObjectScope
@@ -18,6 +18,7 @@ from gomoku_env import GomokuEnvironment
 from gomoku_conv import GomokuConv, GomokuProcessor
 
 from kaiki_model import create_kaiki_model
+from imitation.super import loss
 
 
 CONFIG = ConfigParser('./config.json')
@@ -219,6 +220,9 @@ class Runner(Configurable):
         if INPUT_MODEL is not None:
             with CustomObjectScope({'GomokuConv' : GomokuConv}):
                 self.model = load_model(INPUT_MODEL)
+                f = self.model.output#Flatten()(self.model.output)
+                self.model = Model(inputs=self.model.input, outputs=f)
+
         else:
             self.model = self._createModel()
         memory = SequentialMemory(limit = 50000, window_length = 1)
@@ -282,8 +286,9 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner(GomokuEnvironment)
-    runner.config['epsilon'] = (0.3, 0., 500000)
+    runner.config['epsilon'] = (0.0, 0.000, 290000)
     runner.config['model_type'] = 'gomoku'
+    runner.config['double_dqn'] = True
     runner.config['env_ctor_params'] = {
         'opponents' : [
             'easy',
@@ -291,12 +296,13 @@ def main():
             'hard',
             ],
         'opponent_distribution' : [
-            0.99,
-            0.01,
-            0,
+            1.0,
+            0.0,
+            0.0,
             ],
         }
-    runner.createAgent()
+    with CustomObjectScope({'loss': loss}):
+        runner.createAgent()
     runner.fit(num_epoch)
     m, v = runner.test()
     print('Test result: {} (+/- {})'.format(m, v))

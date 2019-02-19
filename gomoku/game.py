@@ -20,6 +20,6 @@ class ErrorHandler(object):
         return False # reraise nonTcl errors => stderr message and nonzero exit
 
 if __name__ == '__main__':
-    main_window = gui.MainWindow(13,16)
+    main_window = gui.MainWindow(16,16)
     with ErrorHandler():
         main_window.mainloop()
