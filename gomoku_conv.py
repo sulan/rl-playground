@@ -104,30 +104,32 @@ class GomokuProcessor(Processor):
         assert len(batch.shape) == 5, batch.shape
         assert batch.shape[-2] == batch.shape[-1], batch.shape
 
+        batch = np.reshape(batch, (batch.shape[0], batch.shape[2], batch.shape[3], batch.shape[4]))
+
         def transform(state):
             r = random.randrange(8)
             if r == 0:
                 # Flip along the horizontal axis
-                return state[:, :, ::-1, :]
+                return state[:, ::-1, :]
             if r == 1:
                 # Flip along the vertical axis
-                return state[:, :, :, ::-1]
+                return state[:, :, ::-1]
             if r == 2:
                 # Central inversion (rotation of 180 degrees)
-                return state[:, :, ::-1, ::-1]
-            transpose = np.transpose(state, (0, 1, 3, 2))
+                return state[:, ::-1, ::-1]
+            transpose = np.transpose(state, (0, 2, 1))
             if r == 3:
                 # Transpose (horizontal flip of rotation of 90 degrees)
                 return transpose
             if r == 4:
                 # Rotation of 90 degrees
-                return transpose[:, ::-1, :]
+                return transpose[::-1, :]
             if r == 5:
                 # Rotation of 270 degrees
-                return transpose[:, :, ::-1]
+                return transpose[:, ::-1]
             if r == 6:
                 # Vertical flip of rotation of 90 degrees
-                return transpose[:, ::-1, ::-1]
+                return transpose[::-1, ::-1]
             if r == 7:
                 return state
             assert False

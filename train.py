@@ -3,7 +3,7 @@ import numpy as np
 import h5py
 
 from keras.models import Sequential, Model, load_model
-from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization
+from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization, Input
 from keras.optimizers import RMSprop, Adam
 from keras.utils import CustomObjectScope
 
@@ -22,6 +22,7 @@ from imitation.super import loss
 
 
 CONFIG = ConfigParser('./config.json')
+BOARD_SIZE = CONFIG.getOption('board_size', [15, 15])
 NUM_STEPS = CONFIG.getOption('num_steps', 100)
 # Wether to use the verbose output in keras-rl
 VERBOSE_TRAINING = CONFIG.getOption('verbose_training', 0)
@@ -159,7 +160,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                 history.history['episode_reward']
 
         model = agent.model
-        cur_reward_prediction = np.max(model.predict(self.first_observation))
+        cur_reward_prediction = np.max(model.predict(self.first_observation[:,0,:,:,:]))
         self.reward_prediction[episode] = cur_reward_prediction
 
     def on_train_end(self, logs):
@@ -220,7 +221,8 @@ class Runner(Configurable):
         if INPUT_MODEL is not None:
             with CustomObjectScope({'GomokuConv' : GomokuConv}):
                 self.model = load_model(INPUT_MODEL)
-                f = self.model.output#Flatten()(self.model.output)
+                #self.model = self.model(Input(shape = (1, 2, None, None)))
+                f = Flatten()(Reshape((BOARD_SIZE[0], BOARD_SIZE[1]))(self.model.output))
                 self.model = Model(inputs=self.model.input, outputs=f)
 
         else:
@@ -286,7 +288,7 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner(GomokuEnvironment)
-    runner.config['epsilon'] = (0.1, 0.001, 290000)
+    runner.config['epsilon'] = (0.5, 0.001, 990000)
     runner.config['model_type'] = 'gomoku'
     runner.config['double_dqn'] = True
     runner.config['env_ctor_params'] = {
@@ -296,9 +298,9 @@ def main():
             'hard',
             ],
         'opponent_distribution' : [
-            0.3,
-            0.3,
-            0.4,
+            0.33,
+            0.33,
+            0.34,
             ],
         }
     with CustomObjectScope({'loss': loss}):
