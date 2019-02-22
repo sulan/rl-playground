@@ -138,13 +138,14 @@ class Board(object):
             after EVERY move.
 
         """
-        for i in range(self.height):
-            for j in range(self.width):
+        length = 5
+        for i in range(np.maximum(0, self.lastmove[0]-length), np.minimum(self.height, self.lastmove[0]+length)):
+            for j in range(np.maximum(0, self.lastmove[1]-length), np.minimum(self.width, self.lastmove[1]+length)):
                 for getter_function in (self.get_row, self.get_column, self.get_diagonal_lowleft_to_upright, self.get_diagonal_upleft_to_lowright):
                     try:
-                        line, positions = getter_function(i,j)
+                        line, positions = getter_function(i,j,length)
                     except IndexError:
                         continue
-                    if abs(line.sum()) == 5:
+                    if abs(line.sum()) == length:
                         return line[0], positions
         return None, []
