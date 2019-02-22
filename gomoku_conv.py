@@ -104,6 +104,7 @@ class GomokuProcessor(Processor):
         assert len(batch.shape) == 5, batch.shape
         assert batch.shape[-2] == batch.shape[-1], batch.shape
 
+        # Dummy "window_length" dimension removal
         batch = np.reshape(batch, (batch.shape[0], batch.shape[2], batch.shape[3], batch.shape[4]))
 
         def transform(state):
