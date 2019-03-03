@@ -1,7 +1,7 @@
 import json, time, sys
 import numpy as np
 
-from keras.models import Sequential, load_model
+from keras.models import Sequential, load_model, Model
 from keras.layers import Dense, Flatten
 from keras.optimizers import Adam
 from keras.utils import CustomObjectScope
@@ -15,6 +15,8 @@ from dm_env import DumbMars1DEnvironment
 from gomoku_env import GomokuEnvironment
 from gomoku_conv import GomokuConv, GomokuProcessor
 from callbacks import TrainingStatisticsLogger
+from a2c import A2C
+from ppo import PPOLearner
 
 from kaiki_model import create_kaiki_model
 
@@ -56,12 +58,21 @@ class Runner(Configurable):
         'num_steps' : NUM_STEPS,
         'optimizer' : Adam(),
         'seed' : int(time.time() * 10000),
-        'target_model_update' : 10e-3,
         }
 
     DQN_DEFAULT_PARAMS = {
         'double_dqn' : False,
         'epsilon' : 0.3,
+        'target_model_update' : 10e-3,
+        }
+    PPO_DEFAULT_PARAMS = {
+        'clipping_epsilon' : 0.2,
+        'entropy_coeff' : 1,
+        'fit_epochs' : 1,
+        'num_actors' : 1,
+        'lambda' : 1,
+        'trajectory_length' : 1,
+        'vfloss_coeff' : 1,
         }
 
     def __init__(self, env_cls):
@@ -73,13 +84,24 @@ class Runner(Configurable):
 
     def _createModel(self):
         if self.config['model_type'] == 'dense':
-            model = Sequential([
+            shared = Sequential([
                 Flatten(input_shape = (1,) + self.env_cls.NUM_SENSORS),
                 Dense(20, activation='relu'),
                 Dense(20, activation='relu'),
-                Dense(self.env_cls.NUM_ACTIONS, activation = 'linear')
                 ])
+            if self.config['algorithm'] == 'PPO':
+                policy = Dense(
+                    self.env_cls.NUM_ACTIONS, activation = 'softmax')(
+                        shared.output)
+                value = Dense(1, activation = 'linear')(shared.output)
+                model = Model(inputs = shared.inputs, outputs = [policy, value])
+            else:
+                shared.add(
+                    Dense(self.env_cls.NUM_ACTIONS, activation = 'linear'))
+                model = shared
         elif self.config['model_type'] == 'gomoku':
+            assert self.config['algorithm'] == 'DQN', \
+                'Kaiki doesn''t support A2C yet.'
             model = create_kaiki_model(self.env_cls.NUM_SENSORS)
         else:
             raise ValueError(self.config['model_type'])
@@ -101,10 +123,12 @@ class Runner(Configurable):
         return config
 
     def _set_default_params(self):
-        assert self.config['algorithm'] in ['DQN',], \
+        assert self.config['algorithm'] in ['DQN', 'PPO'], \
             'Unsupported RL algorithm: ' + self.config['algorithm']
         if self.config['algorithm'] == 'DQN':
             default_params = Runner.DQN_DEFAULT_PARAMS
+        elif self.config['algorithm'] == 'PPO':
+            default_params = Runner.PPO_DEFAULT_PARAMS
         for k, v in default_params.items():
             if k not in self.config['algorithm_params']:
                 self.config['algorithm_params'][k] = v
@@ -115,28 +139,47 @@ class Runner(Configurable):
                 self.model = load_model(INPUT_MODEL)
         else:
             self.model = self._createModel()
+
         self._set_default_params()
-        memory = SequentialMemory(limit = 50000, window_length = 1)
-        test_policy = EpsGreedyQPolicy(eps = 0)
-        processor = GomokuProcessor() if self.config['model_type'] == 'gomoku' \
-            else None
+        if self.config['algorithm'] in ['DQN',]:
+            memory = SequentialMemory(limit = 50000, window_length = 1)
+            test_policy = EpsGreedyQPolicy(eps = 0)
+            processor = GomokuProcessor() \
+                if self.config['model_type'] == 'gomoku' else None
 
-        with CustomObjectScope({'GomokuConv' : GomokuConv}):
-            self.agent = DQNAgent(model = self.model,
-                                  nb_actions = self.env_cls.NUM_ACTIONS,
-                                  memory = memory,
-                                  nb_steps_warmup = 50,
-                                  target_model_update = \
-                                      self.config['target_model_update'],
-                                  gamma = self.config['gamma'],
-                                  policy = self._getTrainPolicy(),
-                                  test_policy = test_policy,
-                                  processor = processor,
-            self.agent.compile(self.config['optimizer'], metrics = ['mae'])
-                                  enable_double_dqn =
-                                      self.config['algorithm_params']['double_dqn'])
-
-        self.env = self.env_cls(**self.config['env_ctor_params'])
+            with CustomObjectScope({'GomokuConv' : GomokuConv}):
+                params = self.config['algorithm_params']
+                self.agent = DQNAgent(
+                    model = self.model,
+                    nb_actions = self.env_cls.NUM_ACTIONS,
+                    memory = memory,
+                    nb_steps_warmup = 50,
+                    target_model_update = params['target_model_update'],
+                    gamma = self.config['gamma'],
+                    policy = self._getTrainPolicy(),
+                    test_policy = test_policy,
+                    processor = processor,
+                    enable_double_dqn = params['double_dqn'])
+                self.agent.compile(self.config['optimizer'], metrics = ['mae'])
+            self.env = self.env_cls(**self.config['env_ctor_params'])
+        else:
+            with CustomObjectScope({'GomokuConv' : GomokuConv}):
+                params = self.config['algorithm_params']
+                learner = PPOLearner(
+                    self.model,
+                    trajectory_length = params['trajectory_length'],
+                    clipping_epsilon = params['clipping_epsilon'],
+                    gamma = self.config['gamma'],
+                    lam = params['lambda'],
+                    vfloss_coeff = params['vfloss_coeff'],
+                    entropy_coeff = params['entropy_coeff'],
+                    fit_epochs = params['fit_epochs']
+                    )
+                self.agent = A2C(learner = learner,
+                                 num_actors = params['num_actors'],)
+                self.agent.compile(self.config['optimizer'])
+            # TODO incorporate env index
+            self.env = lambda _: self.env_cls(**self.config['env_ctor_params'])
 
     def fit(self, num_steps = None):
         assert self.agent is not None, "createAgent() should be run before fit"
@@ -155,8 +198,12 @@ class Runner(Configurable):
 
         start_time = time.monotonic()
         self.env.reset()
-        self.agent.fit(self.env, num_steps, verbose = VERBOSE_TRAINING,
-                       callbacks = callbacks)
+        if isinstance(self.agent, A2C):
+            # No verbose training support yet
+            self.agent.fit(self.env, num_steps, callbacks = callbacks)
+        else:
+            self.agent.fit(self.env, num_steps, verbose = VERBOSE_TRAINING,
+                           callbacks = callbacks)
         duration = time.monotonic() - start_time
 
         print('Training completed. It took {} seconds, {} per step.'
@@ -164,9 +211,14 @@ class Runner(Configurable):
 
     def test(self, num_episodes = 1):
         assert self.agent is not None, "createAgent() should be run before test"
-        history = self.agent.test(self.env, nb_episodes = num_episodes,
-                                  visualize = True, verbose = 2,
-                                  nb_max_episode_steps = 1000)
+        if isinstance(self.agent, A2C):
+            # Visualisation and verbosity are not yet supported
+            history = self.agent.test(self.env, nb_episodes = num_episodes,
+                                      nb_max_episode_steps = 1000)
+        else:
+            history = self.agent.test(self.env, nb_episodes = num_episodes,
+                                      visualize = True, verbose = 2,
+                                      nb_max_episode_steps = 1000)
         rewards = np.array(history.history['episode_reward'])
         mean = np.mean(rewards)
         c = rewards - mean
