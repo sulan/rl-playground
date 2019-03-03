@@ -24,7 +24,8 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
           each episode)
     """
 
-    def __init__(self, file_name, measurement_name, max_num_steps, env):
+    def __init__(self, file_name, measurement_name, max_num_updates, env,
+                 loss_per_update = 1):
         """
         Opens the file for writing (deletes any current content)
         """
@@ -37,6 +38,9 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             'num_episodes',
             shape = (1,),
             dtype = 'i8')
+        # The step where each episode ended
+        # For Agent, the step is the obvious step
+        # For A2C, the step is the number of updates so far ("learner-step")
         self.episode_ends = self.group.create_dataset(
             'episode_ends',
             shape = (self.episode_dataset_capacity,),
@@ -58,8 +62,9 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         self.percent = 0
         # Maximum number of steps (max size of the loss array)
         self.max_num_updates = max_num_updates
+        self.loss_per_update = loss_per_update
         self.loss = self.group.create_dataset(
-            'loss', shape = (max_num_updates,), dtype = 'f4')
+            'loss', shape = (max_num_updates * loss_per_update,), dtype = 'f4')
         self.first_observation = None
         self.reward_prediction = self.group.create_dataset(
             'reward_prediction',
@@ -69,7 +74,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
         self.env = env
 
-    def on_train_end(self):
+    def on_train_begin(self):
         if self.model is A2C:
             # We store the first observation for all the actors
             self.first_observation = {}
@@ -82,18 +87,40 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                   flush = True)
 
     def on_step_end(self, step, logs):
-        # TODO find out which one is the loss in a more intelligent manner
-        cur_loss = logs['metrics'][0]
-        self.loss[self.num_updates] = cur_loss
-        self.num_updates += 1
-        new_percent = (self.num_updates * 100) // self.max_num_updates
-        self._print_progress(new_percent)
-        # Save first state
-        if step == 0:
-            self.first_observation = np.array(logs['observation'])
-            # It needs to be in the right shape for prediction
-            self.first_observation.shape = (1, 1) \
-                + self.first_observation.shape
+        if isinstance(self.model, A2C):
+            if logs['actor'] is None:
+                # Only the metrics are reported (learner finished its update)
+                # TODO find out which one is the loss in a more intelligent
+                # manner
+                cur_loss = logs['learner_history'][0]
+                self.loss[self.num_updates * self.loss_per_update
+                          :(self.num_updates + 1) * self.loss_per_update] \
+                      = cur_loss
+                self.num_updates += 1
+                new_percent = (self.model.step * 100) // self.max_num_updates
+                self._print_progress(new_percent)
+            else:
+                # One of the actors finished a step
+                if step == 0:
+                    # Save first state
+                    first_observation = np.array(logs['observation'])
+                    # It needs to be in the right shape for prediction
+                    first_observation.shape = (1, 1) \
+                        + self.first_observation.shape
+                    self.first_observation[logs['actor']] = first_observation
+        else:
+            # TODO find out which one is the loss in a more intelligent manner
+            cur_loss = logs['metrics'][0]
+            self.loss[self.num_updates] = cur_loss
+            self.num_updates += 1
+            new_percent = (self.num_updates * 100) // self.max_num_updates
+            self._print_progress(new_percent)
+            if step == 0:
+                # Save first state
+                self.first_observation = np.array(logs['observation'])
+                # It needs to be in the right shape for prediction
+                self.first_observation.shape = (1, 1) \
+                    + self.first_observation.shape
 
     def _grow_episode_datasets(self, episode):
         '''Reallocate array if necessary'''
@@ -108,13 +135,8 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
 
     def on_episode_end(self, episode, logs):
-        # TODO accomodate A2C
         self._grow_episode_datasets(episode)
-
         num_episodes = self.num_episodes[0]
-        if episode != num_episodes:
-            print('Warning: episode number jumped by more than 1:')
-            print('  {} -> {}'.format(num_episodes - 1, episode))
 
         cur_reward = logs['episode_reward']
         self.episode_rewards[episode] = cur_reward
@@ -136,7 +158,12 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                 history.history['episode_reward']
 
         model = agent.model
-        cur_reward_prediction = np.max(model.predict(self.first_observation))
+        prediction = model.predict(self.first_observation)
+        if isinstance(model, A2C):
+            assert len(prediction) == 2, len(prediction)
+            cur_reward_prediction = prediction[0][0]
+        else:
+            cur_reward_prediction = np.max(prediction)
         self.reward_prediction[episode] = cur_reward_prediction
 
     def on_train_end(self, logs):
