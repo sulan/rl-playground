@@ -11,8 +11,6 @@ from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
 from rl.memory import SequentialMemory
 
 from config_parser import ConfigParser
-from dm_env import DumbMars1DEnvironment
-from gomoku_env import GomokuEnvironment
 from gomoku_conv import GomokuConv, GomokuProcessor
 from callbacks import TrainingStatisticsLogger
 from a2c import A2C
@@ -197,11 +195,11 @@ class Runner(Configurable):
             ]
 
         start_time = time.monotonic()
-        self.env.reset()
         if isinstance(self.agent, A2C):
             # No verbose training support yet
             self.agent.fit(self.env, num_steps, callbacks = callbacks)
         else:
+            self.env.reset()
             self.agent.fit(self.env, num_steps, verbose = VERBOSE_TRAINING,
                            callbacks = callbacks)
         duration = time.monotonic() - start_time

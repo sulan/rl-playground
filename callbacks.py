@@ -74,8 +74,9 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
         self.env = env
 
-    def on_train_begin(self):
-        if self.model is A2C:
+    def on_train_begin(self, _):
+        self.num_updates = 0
+        if isinstance(self.model, A2C):
             # We store the first observation for all the actors
             self.first_observation = {}
 
@@ -106,7 +107,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                     first_observation = np.array(logs['observation'])
                     # It needs to be in the right shape for prediction
                     first_observation.shape = (1, 1) \
-                        + self.first_observation.shape
+                        + first_observation.shape
                     self.first_observation[logs['actor']] = first_observation
         else:
             # TODO find out which one is the loss in a more intelligent manner
@@ -157,14 +158,16 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             self.test_episode_rewards[episode // TEST_REWARD_INTERVAL] = \
                 history.history['episode_reward']
 
-        model = agent.model
-        prediction = model.predict(self.first_observation)
-        if isinstance(model, A2C):
+        if isinstance(self.model, A2C):
+            model = agent.learner.model
+            prediction = model.predict(self.first_observation[logs['actor']])
             assert len(prediction) == 2, len(prediction)
-            cur_reward_prediction = prediction[0][0]
+            cur_reward_prediction = prediction[1][0]
         else:
+            model = agent.model
+            prediction = model.predict(self.first_observation)
             cur_reward_prediction = np.max(prediction)
         self.reward_prediction[episode] = cur_reward_prediction
 
-    def on_train_end(self, logs):
+    def on_train_end(self, _):
         self.file.close()

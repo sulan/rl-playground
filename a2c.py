@@ -220,7 +220,6 @@ class A2C:
         metrics (list of functions `lambda y_true, y_pred: metric`): The
             metrics to run during training.
         """
-        metrics = [] if metrics is None else metrics
         self.learner.compile(optimizer, metrics)
         self.compiled = True
 
@@ -256,6 +255,10 @@ class A2C:
         history = History()
         callbacks.append(history)
         callbacks = CallbackList(callbacks)
+        if hasattr(callbacks, 'set_model'):
+            callbacks.set_model(self)
+        else:
+            callbacks._set_model(self)
 
         actors = [self.learner.create_actor(i) for i in range(self.num_actors)]
         envs = [env_factory(i) for i in range(self.num_actors)]
@@ -332,6 +335,10 @@ class A2C:
         history = History()
         callbacks.append(history)
         callbacks = CallbackList(callbacks)
+        if hasattr(callbacks, 'set_model'):
+            callbacks.set_model(self)
+        else:
+            callbacks._set_model(self)
 
         actor = self.learner.create_actor(0)
         env = env_factory(0)

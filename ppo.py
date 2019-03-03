@@ -60,7 +60,7 @@ class PPOLearner(A2C.Learner):
         self.nb_actions = model.output[0]._keras_shape[1]
         self.compiled = False
 
-    def compile(self, optimizer, metrics = {}):
+    def compile(self, optimizer, metrics = None):
         """
         Compiles an agent and the underlying models to be used for training
         and testing.
@@ -71,6 +71,11 @@ class PPOLearner(A2C.Learner):
         metrics (dict of functions `lambda y_true, y_pred: metric`): The
             metrics to run during training. The two keys should be 'pi' and 'V'.
         """
+        if metrics is None:
+            metrics = {
+                'pi': [],
+                'V': [],
+                }
         # We never train the target model so the compilation parameters don't
         # matter
         self.model.compile(optimizer = 'sgd', loss = 'mse')
@@ -195,7 +200,7 @@ class PPOLearner(A2C.Learner):
 
             trajectory_start += cur_trajectory_length
         mask_batch = np.array(mask_batch)
-        dummy_target = np.zeros((states.shape[0], 1))
+        dummy_target = [np.zeros((states.shape[0], 1))] * 3
         history = self.trainable_model.fit([states, pi_old, V_targ_batch,
                                             advantage_batch, mask_batch],
                                            dummy_target,

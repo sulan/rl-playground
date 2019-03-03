@@ -8,6 +8,7 @@ from dm_env import DumbMars1DEnvironment
 
 from a2c import A2C
 from ppo import PPOLearner
+from train import Runner
 
 
 def get_model():
@@ -20,7 +21,7 @@ def get_model():
     value = Dense(1, activation = 'linear')(shared.output)
     return Model(inputs = shared.inputs, outputs = [policy, value])
 
-def main():
+def test_ppo():
     model = get_model()
     learner = PPOLearner(model, 10, fit_epochs = 10)
     agent = A2C(learner, num_actors = 2)
@@ -34,5 +35,17 @@ def main():
     history = agent.test(env_factory, 1)
     print(history.history)
 
+def test_ppo_runner():
+    runner = Runner(DumbMars1DEnvironment)
+    runner.config['algorithm'] = 'PPO'
+    runner.config['env_ctor_params'] = {
+        'height' : 2,
+        }
+    runner.createAgent()
+    runner.fit(10)
+    m, v = runner.test()
+    print('Test result: {} (+/- {})'.format(m, v))
+
 if __name__ == "__main__":
-    main()
+    # test_ppo()
+    test_ppo_runner()
