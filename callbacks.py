@@ -1,6 +1,13 @@
 import numpy as np
+import h5py
 
 import rl.callbacks
+from a2c import A2C
+from config_parser import ConfigParser
+
+CONFIG = ConfigParser('./config.json')
+# Interval at which test rewards are measured
+TEST_REWARD_INTERVAL = CONFIG.getOption('test_reward_interval', 100)
 
 class TrainingStatisticsLogger(rl.callbacks.Callback):
 
@@ -45,13 +52,14 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             shape = (self.test_episode_capacity,),
             maxshape = (None,),
             dtype = 'f4')
-        self.num_steps = None
+        # Number of policy/model updates (size of the loss array)
+        self.num_updates = None
         # Progress of the training
         self.percent = 0
         # Maximum number of steps (max size of the loss array)
-        self.max_num_steps = max_num_steps
-        self.loss = self.group.create_dataset('loss', shape = (max_num_steps,),
-                                              dtype = 'f4')
+        self.max_num_updates = max_num_updates
+        self.loss = self.group.create_dataset(
+            'loss', shape = (max_num_updates,), dtype = 'f4')
         self.first_observation = None
         self.reward_prediction = self.group.create_dataset(
             'reward_prediction',
@@ -76,9 +84,9 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
     def on_step_end(self, step, logs):
         # TODO find out which one is the loss in a more intelligent manner
         cur_loss = logs['metrics'][0]
-        self.loss[self.num_steps] = cur_loss
-        self.num_steps += 1
-        new_percent = (self.num_steps * 100) // self.max_num_steps
+        self.loss[self.num_updates] = cur_loss
+        self.num_updates += 1
+        new_percent = (self.num_updates * 100) // self.max_num_updates
         self._print_progress(new_percent)
         # Save first state
         if step == 0:
@@ -111,7 +119,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         cur_reward = logs['episode_reward']
         self.episode_rewards[episode] = cur_reward
         self.num_episodes[0] = max(episode + 1, num_episodes)
-        self.episode_ends[episode] = self.num_steps
+        self.episode_ends[episode] = self.num_updates
 
         agent = self.model
         if (episode + 1) % TEST_REWARD_INTERVAL == 0:
