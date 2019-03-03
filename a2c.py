@@ -112,8 +112,10 @@ class A2C:
             for _ in range(min(self.trajectory_length, max_trajectory_length)):
                 callbacks.on_step_begin(self.episode_step)
                 action = self.get_action(self.last_observation)
+                callbacks.on_action_begin(action)
                 observation, reward, self.done, info = env.step(action)
                 observation = deepcopy(observation)
+                callbacks.on_action_end(action)
                 self.trajectory.append((self.last_observation, action, reward))
                 self.last_observation = observation
 
