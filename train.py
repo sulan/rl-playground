@@ -1,16 +1,14 @@
 import json, time, sys
 import numpy as np
-import h5py
 
 from keras.models import Sequential, load_model
-from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization
-from keras.optimizers import RMSprop, Adam
+from keras.layers import Dense, Flatten
+from keras.optimizers import Adam
 from keras.utils import CustomObjectScope
 
 from rl.agents.dqn import DQNAgent
 from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
 from rl.memory import SequentialMemory
-import rl.callbacks
 
 from config_parser import ConfigParser
 from dm_env import DumbMars1DEnvironment
@@ -28,8 +26,6 @@ VERBOSE_TRAINING = CONFIG.getOption('verbose_training', 0)
 OUTPUT_DATA_FILE = CONFIG.getOption('output_data_file', 'train.out.hdf5')
 # If not None, the Runner will load this file at agent creation
 INPUT_MODEL = CONFIG.getOption('input_model', None)
-# Interval at which test rewards are measured
-TEST_REWARD_INTERVAL = CONFIG.getOption('test_reward_interval', 100)
 
 
 class PrettyPrintEncoder(json.JSONEncoder):
