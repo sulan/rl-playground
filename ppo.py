@@ -61,6 +61,16 @@ class PPOLearner(A2C.Learner):
         self.compiled = False
 
     def compile(self, optimizer, metrics = []):
+        """
+        Compiles an agent and the underlying models to be used for training
+        and testing.
+
+        # Arguments
+        optimizer (`keras.optimizers.Optimizer` instance): The optimizer to
+            be used during training.
+        metrics (dict of functions `lambda y_true, y_pred: metric`): The
+            metrics to run during training. The two keys should be 'pi' and 'V'.
+        """
         # We never train the target model so the compilation parameters don't
         # matter
         self.model.compile(optimizer = 'sgd', loss = 'mse')
@@ -99,11 +109,21 @@ class PPOLearner(A2C.Learner):
 
         loss_out = Lambda(surrogate_loss, output_shape = (1,))(
             [pi, pi_old, advantage, V, V_target, mask])
+        # Three outputs:
+        # - the first is the PPO loss ($L^{CLIP+VF+S}$ in the paper)
+        # - the second and third are pi and V, for the metrics
         self.trainable_model = Model(inputs = ins + [pi_old, V_target,
                                                      advantage, mask],
-                                     outputs = loss_out)
-        # trainable_model contains the loss
-        loss = lambda _, y_pred: y_pred
+                                     outputs = [loss_out, pi, V])
+        loss = [
+            lambda _, y_pred: y_pred,
+            lambda _, y_pred: K.zeros_like(y_pred),
+            lambda _, y_pred: K.zeros_like(y_pred),
+            ]
+        metrics = {
+            self.trainable_model.output_names[1]: metrics['pi'],
+            self.trainable_model.output_names[2]: metrics['V']
+            }
         self.trainable_model.compile(optimizer = optimizer, loss = loss,
                                      metrics = metrics)
 
@@ -176,15 +196,29 @@ class PPOLearner(A2C.Learner):
             trajectory_start += cur_trajectory_length
         mask_batch = np.array(mask_batch)
         dummy_target = np.zeros((states.shape[0], 1))
-        self.trainable_model.fit([states, pi_old, V_targ_batch, advantage_batch,
-                                  mask_batch],
-                                 dummy_target,
-                                 epochs = self.fit_epochs,
-                                 verbose = 0)
+        history = self.trainable_model.fit([states, pi_old, V_targ_batch,
+                                            advantage_batch, mask_batch],
+                                           dummy_target,
+                                           epochs = self.fit_epochs,
+                                           verbose = 0)
 
         # Clone the new old model
         self.cloned_model.set_weights(self.trainable_model.get_weights())
-        # TODO return metrics
+
+        # Don't need the individual losses
+        return [v for k, v in history.history.items()
+                if k not in self.trainable_model.metrics_names[1:4]]
+
+    @property
+    def metrics_names(self):
+        # Throw away the individual losses
+        assert len(self.trainable_model.output_names) == 3
+        pi_dummy_name = self.trainable_model.output_names[1]
+        V_dummy_name = self.trainable_model.output_names[2]
+        names = [name.replace(pi_dummy_name, 'pi').replace(V_dummy_name, 'V')
+                 for i, name in enumerate(self.trainable_model.metrics_names)
+                 if i not in (1, 2, 3)]
+        return names
 
     def get_config(self):
         config = {

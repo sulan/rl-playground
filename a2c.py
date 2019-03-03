@@ -255,7 +255,13 @@ class A2C:
             # steps
             self.step += len(max(trajectories, key = len))
 
-            self.learner.backward(trajectories)
+            learner_history = self.learner.backward(trajectories)
+            step_logs = {
+                'actor': None,
+                'learner_history': learner_history,
+                }
+            # TODO finalise and document the API for this
+            callbacks.on_step_end(self.step, step_logs)
 
         # No support for keyboard interrupt yet.
         callbacks.on_train_end(logs = {'did_abort': False})
