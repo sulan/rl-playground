@@ -180,7 +180,7 @@ class A2C:
             """
             raise NotImplementedError()
 
-        def compile(self, optimizer, metrics = []):
+        def compile(self, optimizer, metrics):
             """
             Compiles an agent and the underlying models to be used for training
             and testing.

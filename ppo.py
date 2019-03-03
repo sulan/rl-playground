@@ -60,7 +60,7 @@ class PPOLearner(A2C.Learner):
         self.nb_actions = model.output[0]._keras_shape[1]
         self.compiled = False
 
-    def compile(self, optimizer, metrics = []):
+    def compile(self, optimizer, metrics = {}):
         """
         Compiles an agent and the underlying models to be used for training
         and testing.
