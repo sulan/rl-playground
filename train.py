@@ -44,20 +44,28 @@ class Configurable:
 
 
 class Runner(Configurable):
+    DEFAULT_PARAMS = {
+        'algorithm' : 'DQN',
+        'algorithm_params' : {
+            },
+        'env_ctor_params' : {
+            },
+        'gamma' : 0.99,
+        'measurement_name' : 'default',
+        'model_type' : 'dense',
+        'num_steps' : NUM_STEPS,
+        'optimizer' : Adam(),
+        'seed' : int(time.time() * 10000),
+        'target_model_update' : 10e-3,
+        }
+
+    DQN_DEFAULT_PARAMS = {
+        'double_dqn' : False,
+        'epsilon' : 0.3,
+        }
+
     def __init__(self, env_cls):
-        super().__init__({
-            'double_dqn' : False,
-            'env_ctor_params' : {
-                },
-            'epsilon' : 0.3,
-            'gamma' : 0.99,
-            'measurement_name' : 'default',
-            'model_type' : 'dense',
-            'num_steps' : NUM_STEPS,
-            'optimizer' : Adam(),
-            'seed' : int(time.time() * 10000),
-            'target_model_update' : 10e-3,
-            })
+        super().__init__(Runner.DEFAULT_PARAMS)
         self.agent = None
         self.model = None
         self.env = None
@@ -78,7 +86,7 @@ class Runner(Configurable):
         return model
 
     def _getTrainPolicy(self):
-        config = self.config['epsilon']
+        config = self.config['algorithm_params']['epsilon']
         if isinstance(config, (float, int)):
             assert 0 <= config <= 1, 'Epsilon must be in [0, 1]'
             return EpsGreedyQPolicy(eps = config)
@@ -92,6 +100,14 @@ class Runner(Configurable):
                                         nb_steps = config[2])
         return config
 
+    def _set_default_params(self):
+        assert self.config['algorithm'] in ['DQN',], \
+            'Unsupported RL algorithm: ' + self.config['algorithm']
+        if self.config['algorithm'] == 'DQN':
+            default_params = Runner.DQN_DEFAULT_PARAMS
+        for k, v in default_params.items():
+            if k not in self.config['algorithm_params']:
+                self.config['algorithm_params'][k] = v
 
     def createAgent(self):
         if INPUT_MODEL is not None:
@@ -99,6 +115,7 @@ class Runner(Configurable):
                 self.model = load_model(INPUT_MODEL)
         else:
             self.model = self._createModel()
+        self._set_default_params()
         memory = SequentialMemory(limit = 50000, window_length = 1)
         test_policy = EpsGreedyQPolicy(eps = 0)
         processor = GomokuProcessor() if self.config['model_type'] == 'gomoku' \
@@ -115,8 +132,9 @@ class Runner(Configurable):
                                   policy = self._getTrainPolicy(),
                                   test_policy = test_policy,
                                   processor = processor,
-                                  enable_double_dqn = self.config['double_dqn'])
             self.agent.compile(self.config['optimizer'], metrics = ['mae'])
+                                  enable_double_dqn =
+                                      self.config['algorithm_params']['double_dqn'])
 
         self.env = self.env_cls(**self.config['env_ctor_params'])
 
