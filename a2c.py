@@ -174,6 +174,22 @@ class A2C:
         def backward(self, trajectories):
             """
             Update the parameters based on a single trajectory.
+
+            # Returns:
+            Returns the training loss and metrics
+            """
+            raise NotImplementedError()
+
+        def compile(self, optimizer, metrics = []):
+            """
+            Compiles an agent and the underlying models to be used for training
+            and testing.
+
+            # Arguments
+            optimizer (`keras.optimizers.Optimizer` instance): The optimizer to
+                be used during training.
+            metrics (list of functions `lambda y_true, y_pred: metric`): The
+                metrics to run during training.
             """
             raise NotImplementedError()
 
