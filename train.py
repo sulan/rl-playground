@@ -188,10 +188,15 @@ class Runner(Configurable):
         print(self.print_config())
         print('Real number of steps is: {}'.format(num_steps))
 
+        try:
+            loss_per_update = self.config['algorithm_params']['fit_epochs']
+        except KeyError:
+            loss_per_update = 1
         callbacks = [
             TrainingStatisticsLogger(OUTPUT_DATA_FILE,
                                      self.config['measurement_name'],
-                                     num_steps, self.env),
+                                     num_steps, self.env,
+                                     loss_per_update = loss_per_update),
             ]
 
         start_time = time.monotonic()
