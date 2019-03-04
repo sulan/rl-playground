@@ -292,15 +292,6 @@ class A2C:
             # TODO finalise and document the API for this
             callbacks.on_step_end(self.step, step_logs)
 
-        # Episode end logs
-        for actor in actors:
-            episode_logs = {
-                'actor': actor.actor_id,
-                'episode_reward': actor.episode_reward,
-                'nb_episode_steps': actor.episode_step,
-                }
-            callbacks.on_episode_end(actor.episode, episode_logs)
-
         # No support for keyboard interrupt yet.
         callbacks.on_train_end(logs = {'did_abort': False})
         return history
