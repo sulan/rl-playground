@@ -150,9 +150,14 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             # two variables and restore them after as a hack
             agent_training = agent.training
             agent_step = agent.step
-            history = agent.test(
-                self.env, nb_episodes = 1, visualize = False, verbose = 0,
-                nb_max_episode_steps = 1000)
+            if isinstance(agent, A2C):
+                # No visualisation and verbosity support yet
+                history = agent.test(
+                    self.env, nb_episodes = 1, nb_max_episode_steps = 1000)
+            else:
+                history = agent.test(
+                    self.env, nb_episodes = 1, visualize = False, verbose = 0,
+                    nb_max_episode_steps = 1000)
             agent.training = agent_training
             agent.step = agent_step
             self.test_episode_rewards[episode // TEST_REWARD_INTERVAL] = \
