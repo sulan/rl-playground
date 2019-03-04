@@ -217,6 +217,7 @@ class Runner(Configurable):
         if isinstance(self.agent, A2C):
             # Visualisation and verbosity are not yet supported
             history = self.agent.test(self.env, nb_episodes = num_episodes,
+                                      visualize = True,
                                       nb_max_episode_steps = 1000)
         else:
             history = self.agent.test(self.env, nb_episodes = num_episodes,

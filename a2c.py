@@ -2,7 +2,7 @@ from copy import deepcopy
 
 from keras.callbacks import History
 
-from rl.callbacks import CallbackList
+from rl.callbacks import CallbackList, Visualizer
 
 class A2C:
     """
@@ -115,7 +115,10 @@ class A2C:
                 callbacks.on_action_begin(action)
                 observation, reward, self.done, info = env.step(action)
                 observation = deepcopy(observation)
+                # Hack to tell Visualizer the environment
+                callbacks._set_env(env)
                 callbacks.on_action_end(action)
+                callbacks._set_env(None)
                 self.trajectory.append((self.last_observation, action, reward))
                 self.last_observation = observation
 
@@ -224,7 +227,7 @@ class A2C:
         self.compiled = True
 
     def fit(self, env_factory, nb_steps, action_repetition = 1,
-            callbacks = None):
+            callbacks = None, visualize = False):
         """
         Trains the agent on the given environment.
 
@@ -240,6 +243,9 @@ class A2C:
         callbacks (list of `keras.callbacks.Callback` or
             `rl.callbacks.Callback` instances): List of callbacks to apply
             during training.
+        visualize (boolean): If `True`, the environment is visualized during
+            training. However, this is likely going to slow down training
+            significantly and is thus intended to be a debugging instrument.
         """
         if not self.compiled:
             raise RuntimeError(
@@ -254,6 +260,8 @@ class A2C:
         callbacks = [] if not callbacks else callbacks[:]
         history = History()
         callbacks.append(history)
+        if visualize:
+            callbacks.append(Visualizer())
         callbacks = CallbackList(callbacks)
         if hasattr(callbacks, 'set_model'):
             callbacks.set_model(self)
@@ -298,7 +306,7 @@ class A2C:
         return history
 
     def test(self, env_factory, nb_episodes, action_repetition = 1,
-             callbacks = None, nb_max_episode_steps = None):
+             callbacks = None, visualize = True, nb_max_episode_steps = None):
         """
         Tests the agent on the given environment.
 
@@ -316,6 +324,8 @@ class A2C:
         callbacks (list of `keras.callbacks.Callback` or
             `rl.callbacks.Callback` instances): List of callbacks to apply
             during training.
+        visualize (boolean): If `True`, the environment is visualized during
+            testing.
         nb_max_episode_steps (integer): Number of steps per episode that the
             agent performs before automatically resetting the environment. Set
             to `None` if each episode should run (potentially indefinitely)
@@ -334,6 +344,8 @@ class A2C:
         callbacks = [] if not callbacks else callbacks[:]
         history = History()
         callbacks.append(history)
+        if visualize:
+            callbacks.append(Visualizer())
         callbacks = CallbackList(callbacks)
         if hasattr(callbacks, 'set_model'):
             callbacks.set_model(self)

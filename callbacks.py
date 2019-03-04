@@ -72,7 +72,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             maxshape = (None,),
             dtype = 'f4')
 
-        self.env = env
+        self.saved_env = env
 
     def on_train_begin(self, _):
         self.num_updates = 0
@@ -151,13 +151,14 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             agent_training = agent.training
             agent_step = agent.step
             if isinstance(agent, A2C):
-                # No visualisation and verbosity support yet
-                history = agent.test(
-                    self.env, nb_episodes = 1, nb_max_episode_steps = 1000)
+                # No verbosity support yet
+                history = agent.test(self.saved_env, nb_episodes = 1,
+                                     visualize = False,
+                                     nb_max_episode_steps = 1000)
             else:
                 history = agent.test(
-                    self.env, nb_episodes = 1, visualize = False, verbose = 0,
-                    nb_max_episode_steps = 1000)
+                    self.saved_env, nb_episodes = 1, visualize = False,
+                    verbose = 0, nb_max_episode_steps = 1000)
             agent.training = agent_training
             agent.step = agent_step
             self.test_episode_rewards[episode // TEST_REWARD_INTERVAL] = \
