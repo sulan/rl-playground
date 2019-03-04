@@ -363,20 +363,23 @@ class A2C:
             # This will reset the environment in the next `build_trajectory`
             # call.
             actor.reset()
+            done = False
+            episode_step = 0
+            episode_reward = 0
             if nb_max_episode_steps is None:
                 # Collect a relatively long trajectory, then continue if not
                 # done yet.
-                done = False
-                episode_step = 0
                 while not done:
                     done, trajectory = actor.build_trajectory(env, 1000,
                                                               callbacks)
                     episode_step += len(trajectory) - 1
+                    episode_reward += sum(r for s,a,r in trajectory[:-1])
             else:
-                done, trajectory = actor.build_trajectory(
-                    env, nb_max_episode_steps, callbacks)
-                episode_step = len(trajectory) - 1
-                episode_reward = sum(r for s,a,r in trajectory[:-1])
+                while not done and episode_step < nb_max_episode_steps:
+                    done, trajectory = actor.build_trajectory(
+                        env, nb_max_episode_steps, callbacks)
+                    episode_step += len(trajectory) - 1
+                    episode_reward += sum(r for s,a,r in trajectory[:-1])
 
             self.step += episode_step
 
