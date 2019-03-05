@@ -10,7 +10,9 @@ from scipy.signal import medfilt
 
 file_name = 'train.out.hdf5'
 file_name = '/tmp/results0_wo_gom/train.out.hdf5'
-file_name = '/tmp/l341b/meas/test-episode-test_20181116-2007/train.out.hdf5'
+file_name = '/tmp/l341b/meas/ppo-metrics-test_20190304-1627/train.out.hdf5'
+A2C = True
+TEST_INTERVAL = 100
 #  Datasets {{{1 #
 f = h5py.File(file_name, 'r')
 g = f['default']
@@ -20,29 +22,21 @@ print('Num episodes', ne)
 rp = g['reward_prediction'][:ne]
 er = g['episode_rewards'][:ne]
 ee = g['episode_ends'][:ne]
-episode_lengths = ee[1:] - ee[:-1]
-episode_lengths = np.r_[ee[0], episode_lengths]
-test_rewards = g['test_episode_rewards'][:ne // 100]
-eps_max_loss = np.zeros(ne)
-for i,(s,e) in enumerate(zip(np.r_[0,ee[:-1]], ee)):
-    eps_max_loss[i] = np.max(loss[s:e])
-#  1}}} #
-
-
-#  Datasets2 {{{1 # 
-g2 = f['default']
-loss2 = g2['loss']
-ne2 = g2['num_episodes'][0]
-print('Num episodes', ne2)
-rp2 = g2['reward_prediction'][:ne2]
-er2 = g2['episode_rewards'][:ne2]
-ee2 = g2['episode_ends'][:ne2]
-episode_lengths2 = ee2[1:] - ee2[:-1]
-episode_lengths2 = np.r_[ee2[0], episode_lengths2]
-test_rewards2 = g2['test_episode_rewards'][:ne2 // 100]
-eps_max_loss2 = np.zeros(ne2)
-for i,(s,e) in enumerate(zip(np.r_[0,ee2[:-1]], ee2)):
-    eps_max_loss2[i] = np.max(loss2[s:e])
+test_rewards = g['test_episode_rewards'][:ne // TEST_INTERVAL]
+if not A2C:
+    episode_lengths = ee[1:] - ee[:-1]
+    episode_lengths = np.r_[ee[0], episode_lengths]
+    eps_mean_loss = np.zeros(ne)
+    for i,(s,e) in enumerate(zip(np.r_[0,ee[:-1]], ee)):
+        eps_max_loss[i] = np.mean(loss[s:e])
+else:
+    sorted_inds = np.argsort(ee)
+    er = er[sorted_inds]
+    rp = rp[sorted_inds]
+    sorted_inds_interval = np.argsort(ee[TEST_INTERVAL::TEST_INTERVAL])
+    assert sorted_inds_interval.shape == test_rewards.shape
+    test_rewards = test_rewards[sorted_inds_interval]
+    ee = ee[sorted_inds]
 #  1}}} #
 
 #  Plot {{{ # 
@@ -66,6 +60,19 @@ plt.title('Episode length')
 plt.xlabel('#episode')
 plt.show()
 #  }}} Plot # 
+
+#  Plot A2C {{{ #
+plt.figure()
+plt.plot(loss)
+plt.xlabel('#step')
+plt.title('loss')
+plt.figure()
+plt.plot(loss)
+plt.xlabel('#step')
+plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, '.-')
+plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'x-')
+plt.legend(['loss', 'episode_rewards', 'reward_prediction'])
+#  }}} Plot A2C # 
 
 #  GC {{{ # 
 import gc
