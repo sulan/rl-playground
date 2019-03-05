@@ -38,11 +38,14 @@ def test_ppo():
 def test_ppo_runner():
     runner = Runner(DumbMars1DEnvironment)
     runner.config['algorithm'] = 'PPO'
+    runner.config['algorithm_params'] = {
+        'num_actors': 32,
+        }
     runner.config['env_ctor_params'] = {
         'height' : 2,
         }
     runner.createAgent()
-    runner.fit(10)
+    runner.fit(1000 * runner.config['algorithm_params']['num_actors'])
     m, v = runner.test()
     print('Test result: {} (+/- {})'.format(m, v))
 

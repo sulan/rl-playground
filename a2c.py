@@ -13,7 +13,6 @@ class A2C:
     # TODO processor
     # TODO random steps
     # TODO action repetition
-    # TODO callbacks, history
 
     class Actor:
         """
@@ -274,15 +273,18 @@ class A2C:
         self.step = 0
         callbacks.on_train_begin()
         while self.step < nb_steps:
-            max_horizon = nb_steps - self.step
+            # Currently all the actors are used always, and at least one step
+            # is performed
+            # TODO what is better, using fewer actors with full trajectories
+            # (more correlation in the dataset) or more actors with shorter
+            # trajectories?
+            max_horizon = (nb_steps - self.step) // self.num_actors
+            max_horizon = max(1, max_horizon)
             trajectories = [actor.build_trajectory(env, max_horizon, callbacks)
                             for actor, env in zip(actors, envs)]
 
-            # TODO how to increase step?
-            # Currently, the length of the longest trajectory is added
-            # Which means that in overall, all the actors will do (much) fewer
-            # steps
-            self.step += len(max(trajectories, key = len))
+            # Increase by the sum of the steps
+            self.step += sum(map(lambda t: len(t) - 1, trajectories))
 
             learner_history = self.learner.backward(trajectories)
             step_logs = {
