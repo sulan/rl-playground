@@ -1,13 +1,19 @@
 import numpy as np
 import h5py
+import time
+import sys
 
 import rl.callbacks
+import tqdm
+
 from a2c import A2C
 from config_parser import ConfigParser
 
 CONFIG = ConfigParser('./config.json')
 # Interval at which test rewards are measured
 TEST_REWARD_INTERVAL = CONFIG.getOption('test_reward_interval', 100)
+# Wether to print progress
+PRINT_PROGRESS = CONFIG.getOption('print_progress', True)
 
 class TrainingStatisticsLogger(rl.callbacks.Callback):
 
@@ -60,6 +66,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         self.num_updates = None
         # Progress of the training
         self.percent = 0
+        self.progressbar = None
         # Maximum number of steps (max size of the loss array)
         self.max_num_updates = max_num_updates
         self.loss_per_update = loss_per_update
@@ -79,13 +86,28 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         if isinstance(self.model, A2C):
             # We store the first observation for all the actors
             self.first_observation = {}
+        # tqdm is needed only for the printing and times
+        self.progressbar = tqdm.tqdm(total = 100, file = sys.stdout,
+                desc = 'Progress', dynamic_ncols = True,
+                bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
 
     def _print_progress(self, new_percent):
+        if not PRINT_PROGRESS: return
         if new_percent > self.percent:
             self.percent = new_percent
-            print(self.percent // 10 if self.percent % 10 == 0 else '.',
-                  end = '' if self.percent < 100 else '\n',
-                  flush = True)
+            # elapsed = time.time() - self.start_time
+            # left = (100 - self.percent) * elapsed / self.percent
+            # print(self.percent // 10 if self.percent % 10 == 0 else '.',
+            #       end = '' if self.percent < 100 else '\n',
+            #       flush = True)
+            # if new_percent > 1:
+            #     print('\r', end='')
+            # print('Progress: {:>3}%  Elapsed time: {}  Estimated time left: {}'
+            #       .format(self.percent, round(elapsed), round(left)),
+            #       end = '', flush = True)
+            # if new_percent == 100:
+            #     print()
+            self.progressbar.update()
 
     def on_step_end(self, step, logs):
         if isinstance(self.model, A2C):
@@ -177,3 +199,4 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
     def on_train_end(self, _):
         self.file.close()
+        self.progressbar.close()
