@@ -115,6 +115,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                 # Only the metrics are reported (learner finished its update)
                 # TODO find out which one is the loss in a more intelligent
                 # manner
+                # FIXME: changed PPO metrics API
                 cur_loss = logs['learner_history'][0]
                 self.loss[self.num_updates * self.loss_per_update
                           :(self.num_updates + 1) * self.loss_per_update] \

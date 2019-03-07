@@ -84,18 +84,31 @@ class PPOLearner(A2C.Learner):
         self.cloned_model = clone_model(self.model)
         self.cloned_model.compile(optimizer = 'sgd', loss = 'mse')
 
-        def surrogate_loss(args):
-            pi, pi_old, advantage, V, V_target, mask = args
+        def clipped_loss(args):
+            pi, pi_old, advantage, mask = args
             r = pi / pi_old
             clipped_r = K.clip(r, 1 - self.clipping_epsilon,
                                1 + self.clipping_epsilon)
             L_clip = K.minimum(r * advantage, clipped_r * advantage)
-            entropy = K.sum(pi * K.log(pi), axis = -1)
-            vf_loss = K.square(V - V_target)
             L_clip = K.sum(L_clip * mask, axis = -1)
-            # Negative because Keras minimises the loss
-            return (- L_clip + self.vfloss_coeff * vf_loss
-                    - self.entropy_coeff * entropy)
+            # We should maximize L_clip
+            return -L_clip
+
+        def vf_loss(args):
+            V, V_target = args
+            return K.square(V - V_target)
+
+        def entropy_loss(args):
+            pi, = args
+            # We should maximize the entropy
+            return -K.sum(pi * K.log(pi), axis = -1)
+
+        def surrogate_loss(args):
+            """Linear combination of the above three."""
+            L_clip, L_vf, L_entropy = args
+            return (L_clip
+                    + self.vfloss_coeff * L_vf
+                    + self.entropy_coeff * L_entropy)
 
         # action and value
         pi = self.model.output[0]
@@ -112,24 +125,43 @@ class PPOLearner(A2C.Learner):
         ins = [self.model.input] if type(self.model.input) is not list \
             else self.model.input
 
-        loss_out = Lambda(surrogate_loss, output_shape = (1,))(
-            [pi, pi_old, advantage, V, V_target, mask])
-        # Three outputs:
-        # - the first is the PPO loss ($L^{CLIP+VF+S}$ in the paper)
-        # - the second and third are pi and V, for the metrics
-        self.trainable_model = Model(inputs = ins + [pi_old, V_target,
-                                                     advantage, mask],
-                                     outputs = [loss_out, pi, V])
-        loss = [
-            lambda _, y_pred: y_pred,
-            lambda _, y_pred: K.zeros_like(y_pred),
-            lambda _, y_pred: K.zeros_like(y_pred),
-            ]
+        clipped_loss_layer = Lambda(clipped_loss, output_shape = (1,),
+                                    name = 'clipped_loss')(
+            [pi, pi_old, advantage, mask])
+        vf_loss_layer = Lambda(vf_loss, output_shape = (1,),
+                               name = 'vf_loss')(
+            [V, V_target])
+        entropy_loss_layer = Lambda(entropy_loss, output_shape = (1,),
+                                    name = 'entropy_loss')(
+            [pi])
+        # Many outputs:
+        # - the 1st, 2nd and 3rd are the loss components
+        # - the 4th and 5th are pi and V, for the metrics
+        self.trainable_model = Model(
+            inputs = ins + [pi_old, V_target, advantage, mask],
+            outputs = [clipped_loss_layer, vf_loss_layer, entropy_loss_layer,
+                       pi, V])
+
+        loss = {
+            'clipped_loss': lambda _, y_pred: y_pred,
+            'vf_loss': lambda _, y_pred: y_pred,
+            'entropy_loss': lambda _, y_pred: y_pred,
+            self.model.output_names[0]: lambda _, y_pred: K.zeros_like(y_pred),
+            self.model.output_names[1]: lambda _, y_pred: K.zeros_like(y_pred),
+            }
+        loss_weights = {
+            'clipped_loss': 1,
+            'vf_loss': self.vfloss_coeff,
+            'entropy_loss': self.entropy_coeff,
+            self.model.output_names[0]: 0,
+            self.model.output_names[1]: 0,
+        }
         metrics = {
-            self.trainable_model.output_names[1]: metrics['pi'],
-            self.trainable_model.output_names[2]: metrics['V']
+            self.model.output_names[0]: metrics['pi'],
+            self.model.output_names[1]: metrics['V'],
             }
         self.trainable_model.compile(optimizer = optimizer, loss = loss,
+                                     loss_weights = loss_weights,
                                      metrics = metrics)
 
         self.compiled = True
@@ -200,7 +232,8 @@ class PPOLearner(A2C.Learner):
 
             trajectory_start += cur_trajectory_length
         mask_batch = np.array(mask_batch)
-        dummy_target = [np.zeros((states.shape[0], 1))] * 3
+        dummy_target = [np.zeros((states.shape[0], 1))] \
+            * len(self.trainable_model.output)
         history = self.trainable_model.fit([states, pi_old, V_targ_batch,
                                             advantage_batch, mask_batch],
                                            dummy_target,
@@ -210,19 +243,20 @@ class PPOLearner(A2C.Learner):
         # Clone the new old model
         self.cloned_model.set_weights(self.trainable_model.get_weights())
 
-        # Don't need the individual losses
+        # FIXME: vf_loss is 0 for some reason
+        # Throw away the dummy losses
         return [v for k, v in history.history.items()
-                if k not in self.trainable_model.metrics_names[1:4]]
+                if k not in self.trainable_model.metrics_names[4:6]]
 
     @property
     def metrics_names(self):
-        # Throw away the individual losses
-        assert len(self.trainable_model.output_names) == 3
-        pi_dummy_name = self.trainable_model.output_names[1]
-        V_dummy_name = self.trainable_model.output_names[2]
+        # Throw away the dummy losses (losses for pi and V)
+        assert len(self.trainable_model.output_names) == 5
+        pi_dummy_name = self.model.output_names[0]
+        V_dummy_name = self.model.output_names[1]
         names = [name.replace(pi_dummy_name, 'pi').replace(V_dummy_name, 'V')
                  for i, name in enumerate(self.trainable_model.metrics_names)
-                 if i not in (1, 2, 3)]
+                 if i not in (4, 5)]
         return names
 
     def get_config(self):
