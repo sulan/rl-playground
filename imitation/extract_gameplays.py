@@ -2,9 +2,9 @@ import sys
 import numpy as np
 import h5py
 
-import gomoku.board as gboard
-import gomoku.player as player
-from gomoku.player import PseudoGUI
+import gomoku.lib.board as gboard
+import gomoku.lib.player as player
+from gomoku.lib.player import PseudoGUI
 
 from config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
@@ -75,7 +75,7 @@ def generate_some_plays(num):
         actions += a
     return states, actions
 
-def main():
+def extract_ai_gameplays():
     max_num_episodes = int(sys.argv[1])
     f = h5py.File(OUTPUT_NAME, 'w')
     length = f.create_dataset('length', shape = (1,), dtype = 'i8')
@@ -103,5 +103,44 @@ def main():
     f.flush()
     f.close()
 
+def self_play_episode(model):
+    """
+    Let Kaiki an episode against itself
+    """
+    current_colour = gboard.white
+    board = MyBoard(*BOARD_SIZE)
+    expert = player.c_hard.Hard(current_colour)
+    expert_board = MyBoard(*BOARD_SIZE)
+    expert_gui = PseudoGUI(expert_board)
+    states = []
+    actions = []
+    expert_actions = []
+    while True:
+        state = [board.board == current_colour,
+                 board.board == -current_colour]
+        state = np.stack(state)
+        expert_board.board = board.board.copy()
+
+        # Make a move
+        q = model.predict(state.reshape((1,1,BOARD_SIZE[0], BOARD_SIZE[1])))
+        q.shape = BOARD_SIZE
+        action = np.unravel_index(np.argmax(q, axis = None), q.shape)
+        states.append(state)
+        actions.append(action)
+
+        # Let's see the expert's opinion
+        expert.color = current_colour
+        expert.make_move(expert_gui)
+        expert_action = expert_board.last_action
+        expert_actions.append(expert_action)
+
+        if board.full():
+            break
+        winner, _ = board.winner()
+        if winner is not None:
+            break
+        current_colour *= -1
+    return states, actions, expert_actions
+
 if __name__ == "__main__":
-    main()
+    extract_ai_gameplays()
