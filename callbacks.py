@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 import time
 import sys
+import itertools
 
 import rl.callbacks
 import tqdm
@@ -103,13 +104,19 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         if isinstance(self.model, A2C):
             if logs['actor'] is None:
                 # Only the metrics are reported (learner finished its update)
-                # TODO find out which one is the loss in a more intelligent
-                # manner
-                # FIXME: changed PPO metrics API
-                cur_loss = logs['learner_history'][0]
+                loss_inds = [i
+                             for i, name in enumerate(
+                                 self.model.learner.metrics_names)
+                             if 'loss' in name]
+                # All the losses except the overall one
+                if len(loss_inds) > 1:
+                    loss_inds = loss_inds[1:]
+                cur_loss = zip(*(logs['learner_history'][i] for i in loss_inds))
+                cur_loss = itertools.chain(*(list(t) for t in cur_loss))
+                assert len(loss_inds) == 3
                 self.loss[self.num_updates * self.loss_per_update
                           :(self.num_updates + 1) * self.loss_per_update] \
-                      = cur_loss
+                      = list(cur_loss)
                 self.num_updates += 1
                 new_percent = (self.num_updates * 100) // self.max_num_updates
                 self._print_progress(new_percent)
