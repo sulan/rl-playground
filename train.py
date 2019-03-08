@@ -190,12 +190,21 @@ class Runner(Configurable):
 
         try:
             loss_per_update = self.config['algorithm_params']['fit_epochs']
+            num_updates = np.ceil(num_steps /
+                                  self.config['algorithm_params']['num_actors'])
+            # +1 for the last call (if nb_steps isn't evenly divisible by
+            # num_actors)
+            num_updates += 1
+            if self.config['algorithm'] == 'PPO':
+                # PPO has 3 losses
+                loss_per_update *= 3
         except KeyError:
             loss_per_update = 1
+            num_updates = num_steps
         callbacks = [
             TrainingStatisticsLogger(OUTPUT_DATA_FILE,
                                      self.config['measurement_name'],
-                                     num_steps, self.env,
+                                     num_updates, self.env,
                                      loss_per_update = loss_per_update),
             ]
 

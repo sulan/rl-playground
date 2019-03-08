@@ -111,7 +111,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                           :(self.num_updates + 1) * self.loss_per_update] \
                       = cur_loss
                 self.num_updates += 1
-                new_percent = (self.model.step * 100) // self.max_num_updates
+                new_percent = (self.num_updates * 100) // self.max_num_updates
                 self._print_progress(new_percent)
             else:
                 # One of the actors finished a step
