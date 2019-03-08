@@ -100,8 +100,8 @@ class PPOLearner(A2C.Learner):
 
         def entropy_loss(args):
             pi, = args
-            # We should maximize the entropy
-            return -K.sum(pi * K.log(pi), axis = -1)
+            # We should maximize the entropy (minimize negentropy)
+            return K.sum(pi * K.log(pi), axis = -1)
 
         def surrogate_loss(args):
             """Linear combination of the above three."""
