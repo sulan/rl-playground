@@ -86,11 +86,12 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         if isinstance(self.model, A2C):
             # We store the first observation for all the actors
             self.first_observation = {}
-        # tqdm is needed only for the printing and times
-        self.progressbar = tqdm.tqdm(
-            total = 100, file = sys.stdout,
-            desc = 'Progress', dynamic_ncols = True,
-            bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
+        if PRINT_PROGRESS:
+            # tqdm is needed only for the printing and times
+            self.progressbar = tqdm.tqdm(
+                total = 100, file = sys.stdout,
+                desc = 'Progress', dynamic_ncols = True,
+                bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
 
     def _print_progress(self, new_percent):
         if not PRINT_PROGRESS: return
@@ -189,4 +190,5 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
 
     def on_train_end(self, _):
         self.file.close()
-        self.progressbar.close()
+        if PRINT_PROGRESS:
+            self.progressbar.close()
