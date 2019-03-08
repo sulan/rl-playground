@@ -10,7 +10,7 @@ from scipy.signal import medfilt
 
 file_name = 'train.out.hdf5'
 file_name = '/tmp/results0_wo_gom/train.out.hdf5'
-file_name = '/tmp/l341b/meas/ppo-metrics-test_20190304-1627/train.out.hdf5'
+file_name = '/tmp/train.out.hdf5'
 A2C = True
 TEST_INTERVAL = 100
 #  Datasets {{{1 #
@@ -61,17 +61,22 @@ plt.xlabel('#episode')
 plt.show()
 #  }}} Plot # 
 
-#  Plot A2C {{{ #
+#  Plot PPO {{{ #
 plt.figure()
-plt.plot(loss)
+plt.plot(loss[0::3])
+plt.plot(loss[1::3])
+plt.plot(loss[2::3])
+plt.legend(['clip', 'vf', 'entropy'])
 plt.xlabel('#step')
 plt.title('loss')
 plt.figure()
-plt.plot(loss)
+plt.plot(loss[0::3])
+plt.plot(loss[1::3])
+plt.plot(loss[2::3])
 plt.xlabel('#step')
 plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, '.-')
 plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'x-')
-plt.legend(['loss', 'episode_rewards', 'reward_prediction'])
+plt.legend(['clip_loss', 'vf_loss', 'entropy_loss', 'episode_rewards', 'reward_prediction'])
 #  }}} Plot A2C # 
 
 #  GC {{{ # 
