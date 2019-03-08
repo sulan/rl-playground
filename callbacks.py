@@ -87,26 +87,15 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
             # We store the first observation for all the actors
             self.first_observation = {}
         # tqdm is needed only for the printing and times
-        self.progressbar = tqdm.tqdm(total = 100, file = sys.stdout,
-                desc = 'Progress', dynamic_ncols = True,
-                bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
+        self.progressbar = tqdm.tqdm(
+            total = 100, file = sys.stdout,
+            desc = 'Progress', dynamic_ncols = True,
+            bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
 
     def _print_progress(self, new_percent):
         if not PRINT_PROGRESS: return
         if new_percent > self.percent:
             self.percent = new_percent
-            # elapsed = time.time() - self.start_time
-            # left = (100 - self.percent) * elapsed / self.percent
-            # print(self.percent // 10 if self.percent % 10 == 0 else '.',
-            #       end = '' if self.percent < 100 else '\n',
-            #       flush = True)
-            # if new_percent > 1:
-            #     print('\r', end='')
-            # print('Progress: {:>3}%  Elapsed time: {}  Estimated time left: {}'
-            #       .format(self.percent, round(elapsed), round(left)),
-            #       end = '', flush = True)
-            # if new_percent == 100:
-            #     print()
             self.progressbar.update()
 
     def on_step_end(self, step, logs):
