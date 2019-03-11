@@ -74,8 +74,8 @@ plt.plot(loss[0::3])
 plt.plot(loss[1::3])
 plt.plot(loss[2::3])
 plt.xlabel('#step')
-plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, '.-')
-plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'x-')
+plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, '.')
+plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'x')
 plt.legend(['clip_loss', 'vf_loss', 'entropy_loss', 'episode_rewards', 'reward_prediction'])
 #  }}} Plot A2C # 
 

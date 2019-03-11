@@ -211,7 +211,8 @@ class PPOLearner(A2C.Learner):
             masks = np.zeros_like(advantages)
 
             next_advantage = 0
-            V_targ = V[:-1]
+            V_targ = V[:-1].copy()
+            V_targ.shape = (-1, 1) # Now we can modify it in the loop
             for delta, action, advantage, mask, V_targ_elem in zip(
                     deltas[::-1],
                     actions[::-1],
@@ -221,13 +222,12 @@ class PPOLearner(A2C.Learner):
                 advantage[action] = next_advantage = \
                     delta + self.gamma * self.lam * next_advantage
                 mask[action] = 1
-                V_targ_elem += next_advantage
+                V_targ_elem[0] += next_advantage
 
             advantage_batch = np.append(advantage_batch, advantages, axis = 0)
             masks = np.zeros((cur_trajectory_length, self.nb_actions))
             masks[range(cur_trajectory_length), actions] = 1
             mask_batch = np.append(mask_batch, masks, axis = 0)
-            V_targ.shape = (-1, 1)
             V_targ_batch = np.append(V_targ_batch, V_targ, axis = 0)
 
             trajectory_start += cur_trajectory_length
