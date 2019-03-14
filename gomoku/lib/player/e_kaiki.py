@@ -12,13 +12,14 @@ CONFIG = ConfigParser('./config.json')
 
 # Size of the board: [height, width]
 BOARD_SIZE = CONFIG.getOption('board_size', [16, 16])
-MODEL_FILE = CONFIG.input_model
+MODEL_FILE = CONFIG.getOption('input_model', None)
 
 class KaikiPlayer(Player):
     name = 'Kaiki'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        assert MODEL_FILE is not None
         self.model = load_model(MODEL_FILE,
                 custom_objects = {'GomokuConv' : GomokuConv})
 
