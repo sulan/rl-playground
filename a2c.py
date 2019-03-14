@@ -8,6 +8,39 @@ class A2C:
     """
     Implements an Advantage Actor Critic agent with similar API to
     rl.core.Agent.
+
+    It's interface is similar to the compile/fit/test API of the rl.core.Agent,
+    but is adapted to work with multiple actors. Instead of subclassing, the
+    different algorithms need to implement the A2C.Learner and A2C.Actor
+    classes. The actors are created using a factory function in the Learner and
+    are assumed to behave based on a (read-only) view of the same model.
+
+    During testing, only one actor is used to generate the test episodes.
+
+    Multistep algorithms are supported: the actors generate lists of
+    state-transitions (called trajectories here, although they are not
+    necessarily full trajectories).
+
+    The same callback API is kept, but on_step_begin/end is called in two
+    contexts: when an actor performs a step (interaction with the environment)
+    and when the learner does a parameter update. To differentiate between the
+    two (and between different actor instances), the former has an "actor_id"
+    entry in the logs parameter specifying the calling actor. These id-s are
+    assumed to be initialised in the factory function of the learner. The
+    epidose id-s are generated via the get_new_episode_index method of the
+    Actor, this should return different id-s for different actors. The step
+    parameter is the step within the episode.
+
+    After a learner step (parameter update), this "actor" entry is set to None,
+    and the metrics are returned in the "learner_history" metric. This really is
+    a history (dictionary containing the lists of the different metrics) to
+    support algorithms that perform multiple updates. The step parameter is the
+    sum of all actor steps taken so far.
+
+    Features in rl.core.Agent not yet supported:
+    - processor
+    - random steps at the beginning of the episode
+    - action repetition
     """
 
     # TODO processor
@@ -291,7 +324,6 @@ class A2C:
                 'actor': None,
                 'learner_history': learner_history,
                 }
-            # TODO finalise and document the API for this
             callbacks.on_step_end(self.step, step_logs)
 
         # No support for keyboard interrupt yet.

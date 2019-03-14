@@ -29,7 +29,8 @@ class PolicyGradientActor(A2C.AbstractActor):
 
 def generate_episode_counter():
     """
-    Returns with a simple counter function to used in episode index generation.
+    Returns with a simple counter function to be used in episode index
+    generation.
     """
     new_episode_index = -1
     def get_new_episode_index():
@@ -41,6 +42,17 @@ def generate_episode_counter():
 class PPOLearner(A2C.Learner):
     """
     An A2C learner for the Proximal Policy Optimization algorithm.
+
+    Expects a model with two outputs: for the policy (pi) and the value (V),
+    respectively. The returned metrics are the three losses: surrogate-clipped
+    loss, vf loss (the MSE between the new and old estimations of V-s) and the
+    entropy, and any metrics operating on the model outputs given to compile.
+    The clipped-surrogate and entropy losses are multiplied by -1 to maximise
+    them, and the final loss is the linear combination of the three (using the
+    vfloss_coeff and entropy_coeff parameters).
+
+    This is a multistep algorithm, the trajectory_length parameter sets the
+    horizon.
 
     arXiv:1707.06347
     """
@@ -54,7 +66,7 @@ class PPOLearner(A2C.Learner):
         self.vfloss_coeff = vfloss_coeff
         self.entropy_coeff = entropy_coeff
         self.fit_epochs = fit_epochs
-        # from a state, it estimaties the action and the value
+        # from a state, it outputs the action probability and the value
         assert len(model.output) == 2, len(model.output)
         self.model = model
         self.nb_actions = model.output[0]._keras_shape[1]
