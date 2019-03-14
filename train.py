@@ -1,9 +1,8 @@
 import json, time, sys
 import numpy as np
-import h5py
 
-from keras.models import Sequential, Model, load_model
-from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization, Input
+from keras.models import Sequential, load_model, Model
+from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization
 from keras.optimizers import RMSprop, Adam
 from keras.utils import CustomObjectScope
 
@@ -16,6 +15,9 @@ from config_parser import ConfigParser
 from dm_env import DumbMars1DEnvironment
 from gomoku_env import GomokuEnvironment
 from gomoku_conv import GomokuConv, GomokuProcessor
+from callbacks import TrainingStatisticsLogger
+from a2c import A2C
+from ppo import PPOLearner
 
 from kaiki_model import create_kaiki_model
 from imitation.super import loss
@@ -29,8 +31,6 @@ VERBOSE_TRAINING = CONFIG.getOption('verbose_training', 0)
 OUTPUT_DATA_FILE = CONFIG.getOption('output_data_file', 'train.out.hdf5')
 # If not None, the Runner will load this file at agent creation
 INPUT_MODEL = CONFIG.getOption('input_model', None)
-# Interval at which test rewards are measured
-TEST_REWARD_INTERVAL = CONFIG.getOption('test_reward_interval', 100)
 
 
 class PrettyPrintEncoder(json.JSONEncoder):
@@ -47,141 +47,39 @@ class Configurable:
                           cls = PrettyPrintEncoder)
 
 
-class TrainingStatisticsLogger(rl.callbacks.Callback):
-
-    """
-    Callback to write statistics for training steps and episodes to a HDF5
-    file
-
-    Statistics collected:
-        - loss (TD-error in one update)
-        - the step index at the end of each episode
-        - reward at the end of each episode
-        - test reward at regular intervals
-        - reward prediction (predicted V value for the starting state after
-          each episode)
-    """
-
-    def __init__(self, file_name, measurement_name, max_num_steps, env):
-        """
-        Opens the file for writing (deletes any current content)
-        """
-        self.file = h5py.File(file_name, 'w')
-        self.group = self.file.create_group(measurement_name)
-        self.episode_dataset_capacity = 8
-        self.test_episode_capacity = 8
-        self.num_episodes = self.group.create_dataset(
-            'num_episodes',
-            shape = (1,),
-            dtype = 'i8')
-        self.episode_ends = self.group.create_dataset(
-            'episode_ends',
-            shape = (self.episode_dataset_capacity,),
-            maxshape = (None,),
-            dtype = 'i8')
-        self.episode_rewards = self.group.create_dataset(
-            'episode_rewards',
-            shape = (self.episode_dataset_capacity,),
-            maxshape = (None,),
-            dtype = 'f4')
-        self.test_episode_rewards = self.group.create_dataset(
-            'test_episode_rewards',
-            shape = (self.test_episode_capacity,),
-            maxshape = (None,),
-            dtype = 'f4')
-        self.num_steps = 0
-        self.percent = 0
-        self.max_num_steps = max_num_steps
-        self.loss = self.group.create_dataset('loss', shape = (max_num_steps,),
-                                              dtype = 'f4')
-        self.first_observation = None
-        self.reward_prediction = self.group.create_dataset(
-            'reward_prediction',
-            shape = (self.episode_dataset_capacity,),
-            maxshape = (None,),
-            dtype = 'f4')
-
-        self.env = env
-
-    def on_step_end(self, step, logs):
-        # TODO find out which one is the loss in a more intelligent manner
-        cur_loss = logs['metrics'][0]
-        self.loss[self.num_steps] = cur_loss
-        self.num_steps += 1
-        new_percent = (self.num_steps * 100) // self.max_num_steps
-        # Print progress
-        if new_percent > self.percent:
-            self.percent = new_percent
-            print(self.percent // 10 if self.percent % 10 == 0 else '.',
-                  end = '' if self.percent < 100 else '\n', flush = True)
-        # Save first state
-        if step == 0:
-            self.first_observation = np.array(logs['observation'])
-            # It needs to be in the right shape for prediction
-            self.first_observation.shape = (1, 1) + self.first_observation.shape
-
-    def _grow_episode_datasets(self, episode):
-        '''Reallocate array if necessary'''
-        while self.episode_dataset_capacity <= episode:
-            self.episode_dataset_capacity *= 2
-        while self.test_episode_capacity <= episode // TEST_REWARD_INTERVAL:
-            self.test_episode_capacity *= 2
-        self.episode_rewards.resize(self.episode_dataset_capacity, axis = 0)
-        self.episode_ends.resize(self.episode_dataset_capacity, axis = 0)
-        self.reward_prediction.resize(self.episode_dataset_capacity, axis = 0)
-        self.test_episode_rewards.resize(self.test_episode_capacity, axis = 0)
-
-
-    def on_episode_end(self, episode, logs):
-        self._grow_episode_datasets(episode)
-
-        num_episodes = self.num_episodes[0]
-        if episode != num_episodes:
-            print('Warning: episode number jumped by more than 1:')
-            print('  {} -> {}'.format(num_episodes - 1, episode))
-
-        cur_reward = logs['episode_reward']
-        self.episode_rewards[episode] = cur_reward
-        self.num_episodes[0] = max(episode + 1, num_episodes)
-        self.episode_ends[episode] = self.num_steps
-
-        agent = self.model
-        if (episode + 1) % TEST_REWARD_INTERVAL == 0:
-            # Since the test() method has side-effects, we have to save these
-            # two variables and restore them after as a hack
-            agent_training = agent.training
-            agent_step = agent.step
-            history = agent.test(
-                self.env, nb_episodes = 1, visualize = False, verbose = 0,
-                nb_max_episode_steps = 1000)
-            agent.training = agent_training
-            agent.step = agent_step
-            self.test_episode_rewards[episode // TEST_REWARD_INTERVAL] = \
-                history.history['episode_reward']
-
-        model = agent.model
-        cur_reward_prediction = np.max(model.predict(self.first_observation[:,0,:,:,:]))
-        self.reward_prediction[episode] = cur_reward_prediction
-
-    def on_train_end(self, logs):
-        self.file.close()
-
 
 class Runner(Configurable):
+    DEFAULT_PARAMS = {
+        'algorithm' : 'DQN',
+        'algorithm_params' : {
+            },
+        'env_ctor_params' : {
+            },
+        'gamma' : 0.99,
+        'measurement_name' : 'default',
+        'model_type' : 'dense',
+        'num_steps' : NUM_STEPS,
+        'optimizer' : Adam(),
+        'seed' : int(time.time() * 10000),
+        }
+
+    DQN_DEFAULT_PARAMS = {
+        'double_dqn' : False,
+        'epsilon' : 0.3,
+        'target_model_update' : 10e-3,
+        }
+    PPO_DEFAULT_PARAMS = {
+        'clipping_epsilon' : 0.2,
+        'entropy_coeff' : 0.01,
+        'fit_epochs' : 1,
+        'num_actors' : 1,
+        'lambda' : 1,
+        'trajectory_length' : 1,
+        'vfloss_coeff' : 0.5,
+        }
+
     def __init__(self, env_cls):
-        super().__init__({
-            'double_dqn' : False,
-            'env_ctor_params' : {
-                },
-            'epsilon' : 0.3,
-            'gamma' : 0.99,
-            'measurement_name' : 'default',
-            'model_type' : 'dense',
-            'num_steps' : NUM_STEPS,
-            'optimizer' : Adam(),
-            'seed' : int(time.time() * 10000),
-            'target_model_update' : 10e-3,
-            })
+        super().__init__(Runner.DEFAULT_PARAMS)
         self.agent = None
         self.model = None
         self.env = None
@@ -189,20 +87,31 @@ class Runner(Configurable):
 
     def _createModel(self):
         if self.config['model_type'] == 'dense':
-            model = Sequential([
+            shared = Sequential([
                 Flatten(input_shape = (1,) + self.env_cls.NUM_SENSORS),
                 Dense(20, activation='relu'),
                 Dense(20, activation='relu'),
-                Dense(self.env_cls.NUM_ACTIONS, activation = 'linear')
                 ])
+            if self.config['algorithm'] == 'PPO':
+                policy = Dense(
+                    self.env_cls.NUM_ACTIONS, activation = 'softmax')(
+                        shared.output)
+                value = Dense(1, activation = 'linear')(shared.output)
+                model = Model(inputs = shared.inputs, outputs = [policy, value])
+            else:
+                shared.add(
+                    Dense(self.env_cls.NUM_ACTIONS, activation = 'linear'))
+                model = shared
         elif self.config['model_type'] == 'gomoku':
+            assert self.config['algorithm'] == 'DQN', \
+                'Kaiki doesn''t support A2C yet.'
             model = create_kaiki_model(self.env_cls.NUM_SENSORS)
         else:
             raise ValueError(self.config['model_type'])
         return model
 
     def _getTrainPolicy(self):
-        config = self.config['epsilon']
+        config = self.config['algorithm_params']['epsilon']
         if isinstance(config, (float, int)):
             assert 0 <= config <= 1, 'Epsilon must be in [0, 1]'
             return EpsGreedyQPolicy(eps = config)
@@ -216,6 +125,16 @@ class Runner(Configurable):
                                         nb_steps = config[2])
         return config
 
+    def _set_default_params(self):
+        assert self.config['algorithm'] in ['DQN', 'PPO'], \
+            'Unsupported RL algorithm: ' + self.config['algorithm']
+        if self.config['algorithm'] == 'DQN':
+            default_params = Runner.DQN_DEFAULT_PARAMS
+        elif self.config['algorithm'] == 'PPO':
+            default_params = Runner.PPO_DEFAULT_PARAMS
+        for k, v in default_params.items():
+            if k not in self.config['algorithm_params']:
+                self.config['algorithm_params'][k] = v
 
     def createAgent(self):
         if INPUT_MODEL is not None:
@@ -226,26 +145,48 @@ class Runner(Configurable):
 
         else:
             self.model = self._createModel()
-        memory = SequentialMemory(limit = 50000, window_length = 1)
-        test_policy = EpsGreedyQPolicy(eps = 0)
-        processor = GomokuProcessor() if self.config['model_type'] == 'gomoku' \
-            else None
 
-        with CustomObjectScope({'GomokuConv' : GomokuConv}):
-            self.agent = DQNAgent(model = self.model,
-                                  nb_actions = self.env_cls.NUM_ACTIONS,
-                                  memory = memory,
-                                  nb_steps_warmup = 50,
-                                  target_model_update = \
-                                      self.config['target_model_update'],
-                                  gamma = self.config['gamma'],
-                                  policy = self._getTrainPolicy(),
-                                  test_policy = test_policy,
-                                  processor = processor,
-                                  enable_double_dqn = self.config['double_dqn'])
-            self.agent.compile(self.config['optimizer'], metrics = ['mae'])
+        self._set_default_params()
+        if self.config['algorithm'] in ['DQN',]:
+            memory = SequentialMemory(limit = 50000, window_length = 1)
+            test_policy = EpsGreedyQPolicy(eps = 0)
+            processor = GomokuProcessor() \
+                if self.config['model_type'] == 'gomoku' else None
 
-        self.env = self.env_cls(**self.config['env_ctor_params'])
+            with CustomObjectScope({'GomokuConv' : GomokuConv}):
+                params = self.config['algorithm_params']
+                self.agent = DQNAgent(
+                    model = self.model,
+                    nb_actions = self.env_cls.NUM_ACTIONS,
+                    memory = memory,
+                    nb_steps_warmup = 50,
+                    target_model_update = params['target_model_update'],
+                    gamma = self.config['gamma'],
+                    policy = self._getTrainPolicy(),
+                    test_policy = test_policy,
+                    processor = processor,
+                    enable_double_dqn = params['double_dqn'])
+                self.agent.compile(self.config['optimizer'], metrics = ['mae'])
+            self.env = self.env_cls(**self.config['env_ctor_params'])
+        else:
+            with CustomObjectScope({'GomokuConv' : GomokuConv}):
+                params = self.config['algorithm_params']
+                learner = PPOLearner(
+                    self.model,
+                    trajectory_length = params['trajectory_length'],
+                    clipping_epsilon = params['clipping_epsilon'],
+                    gamma = self.config['gamma'],
+                    lam = params['lambda'],
+                    vfloss_coeff = params['vfloss_coeff'],
+                    entropy_coeff = params['entropy_coeff'],
+                    fit_epochs = params['fit_epochs']
+                    )
+                self.agent = A2C(learner = learner,
+                                 num_actors = params['num_actors'],)
+                self.agent.compile(self.config['optimizer'])
+            # TODO incorporate env index
+            self.env = lambda _: self.env_cls(**self.config['env_ctor_params'])
+
 
     def fit(self, num_steps = None):
         assert self.agent is not None, "createAgent() should be run before fit"
@@ -256,16 +197,34 @@ class Runner(Configurable):
         print(self.print_config())
         print('Real number of steps is: {}'.format(num_steps))
 
+        try:
+            loss_per_update = self.config['algorithm_params']['fit_epochs']
+            num_updates = np.ceil(num_steps /
+                                  self.config['algorithm_params']['num_actors'])
+            # +1 for the last call (if nb_steps isn't evenly divisible by
+            # num_actors)
+            num_updates += 1
+            if self.config['algorithm'] == 'PPO':
+                # PPO has 3 losses
+                loss_per_update *= 3
+        except KeyError:
+            loss_per_update = 1
+            num_updates = num_steps
         callbacks = [
             TrainingStatisticsLogger(OUTPUT_DATA_FILE,
                                      self.config['measurement_name'],
-                                     num_steps, self.env),
+                                     num_updates, self.env,
+                                     loss_per_update = loss_per_update),
             ]
 
         start_time = time.monotonic()
-        self.env.reset()
-        self.agent.fit(self.env, num_steps, verbose = VERBOSE_TRAINING,
-                       callbacks = callbacks)
+        if isinstance(self.agent, A2C):
+            # No verbose training support yet
+            self.agent.fit(self.env, num_steps, callbacks = callbacks)
+        else:
+            self.env.reset()
+            self.agent.fit(self.env, num_steps, verbose = VERBOSE_TRAINING,
+                           callbacks = callbacks)
         duration = time.monotonic() - start_time
 
         print('Training completed. It took {} seconds, {} per step.'
@@ -273,9 +232,15 @@ class Runner(Configurable):
 
     def test(self, num_episodes = 1):
         assert self.agent is not None, "createAgent() should be run before test"
-        history = self.agent.test(self.env, nb_episodes = num_episodes,
-                                  visualize = True, verbose = 2,
-                                  nb_max_episode_steps = 1000)
+        if isinstance(self.agent, A2C):
+            # Visualisation and verbosity are not yet supported
+            history = self.agent.test(self.env, nb_episodes = num_episodes,
+                                      visualize = True,
+                                      nb_max_episode_steps = 1000)
+        else:
+            history = self.agent.test(self.env, nb_episodes = num_episodes,
+                                      visualize = True, verbose = 2,
+                                      nb_max_episode_steps = 1000)
         rewards = np.array(history.history['episode_reward'])
         mean = np.mean(rewards)
         c = rewards - mean
@@ -287,9 +252,9 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner(GomokuEnvironment)
-    runner.config['epsilon'] = (0.5, 0.001, 990000)
+    runner.config['epsilon'] = (0.3, 0., 500000)
     runner.config['model_type'] = 'gomoku'
-    runner.config['double_dqn'] = True
+    runner.config['algorithm_params']['double_dqn'] = True
     runner.config['env_ctor_params'] = {
         'opponents' : [
             'easy',
