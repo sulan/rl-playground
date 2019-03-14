@@ -122,7 +122,7 @@ def self_play_episode(model):
         expert_board.board = board.board.copy()
 
         # Make a move
-        q = model.predict(state.reshape((1,1,BOARD_SIZE[0], BOARD_SIZE[1])))
+        q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
         q.shape = BOARD_SIZE
         action = np.unravel_index(np.argmax(q, axis = None), q.shape)
         states.append(state)

@@ -140,8 +140,11 @@ class Runner(Configurable):
         if INPUT_MODEL is not None:
             with CustomObjectScope({'GomokuConv' : GomokuConv}):
                 self.model = load_model(INPUT_MODEL)
-                output = Flatten()(Reshape((BOARD_SIZE[0], BOARD_SIZE[1]))(self.model.output))
-                self.model = Model(inputs=self.model.input, outputs=output)
+                if self.config['model_type'] == 'gomoku':
+                    output = Flatten()(
+                        Reshape((BOARD_SIZE[0], BOARD_SIZE[1]))(
+                            self.model.output))
+                    self.model = Model(inputs=self.model.input, outputs=output)
 
         else:
             self.model = self._createModel()

@@ -18,7 +18,7 @@ OUTPUT_FILE = CONFIG.getOption('dagger_output_file', 'model.hdf5')
 
 def dagger(num_iterations):
     with CustomObjectScope({'GomokuConv':GomokuConv}):
-        model = create_kaiki_model(BOARD_SIZE)
+        model = create_kaiki_model((2, BOARD_SIZE[0], BOARD_SIZE[1]))
     model.compile(
         optimizer='adam',
         loss=loss,
