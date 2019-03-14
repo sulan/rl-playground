@@ -65,12 +65,12 @@ class Runner(Configurable):
         }
     PPO_DEFAULT_PARAMS = {
         'clipping_epsilon' : 0.2,
-        'entropy_coeff' : 1,
+        'entropy_coeff' : 0.01,
         'fit_epochs' : 1,
         'num_actors' : 1,
         'lambda' : 1,
         'trajectory_length' : 1,
-        'vfloss_coeff' : 1,
+        'vfloss_coeff' : 0.5,
         }
 
     def __init__(self, env_cls):
