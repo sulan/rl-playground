@@ -114,7 +114,7 @@ class DumbMars1DEnvironment(DumbMarsEnvironment):
     NUM_ACTIONS = 3
     NUM_SENSORS = (3,)
 
-    def __init__ (self,height):
+    def __init__ (self, height, random_start = False):
         super(DumbMars1DEnvironment, self).__init__(1)
         self.action_space = gyme.Discrete(self.NUM_ACTIONS)
         self.height = height
@@ -122,6 +122,7 @@ class DumbMars1DEnvironment(DumbMarsEnvironment):
         low = np.array([0.5,-self.ceil, -2])
         high= np.array([self.ceil,self.ceil, 2])
         self.observation_space = gyme.Box(low=low,high=high)
+        self.random_start = random_start
 
     def _reset (self):
         if self.random_start:
