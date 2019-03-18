@@ -36,7 +36,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
         """
         Opens the file for writing (deletes any current content)
         """
-        self.file = h5py.File(file_name, 'w')
+        self.file = h5py.File(file_name, 'a')
         self.group = self.file.create_group(measurement_name)
         # Capacities of the different arrays (we resize them when needed)
         self.episode_dataset_capacity = 8

@@ -5,7 +5,10 @@ from train import Runner
 from dm_env import DumbMars1DEnvironment
 
 STARTING_HEIGHT = 10
+N = 10
 NUM_STEPS = 10000
+
+test_no = None
 
 ALGORITHM_PARAMS = {
     'DQN': {
@@ -23,9 +26,10 @@ ALGORITHM_PARAMS = {
 def run(algorithm, starting_height, random_start = False, runner = None):
     print('Algorithm: {}, Starting from {}, {} start'.format(
         algorithm, starting_height, 'random' if random_start else 'fix'))
-    measurement_name = '{}{}-{}-{}'.format(
+    measurement_name = '{}{}-{}-{}-{}'.format(
         starting_height, 'random' if random_start else 'fixed', algorithm,
-        'new' if runner is None else 'cont.')
+        'new' if runner is None else 'cont.',
+        test_no)
     if not runner:
         runner = Runner(DumbMars1DEnvironment)
         runner.config['algorithm'] = algorithm
@@ -42,7 +46,7 @@ def run(algorithm, starting_height, random_start = False, runner = None):
     return runner
 
 
-def main():
+def test_once():
     algorithms = ['DQN', 'PPO']
     print('#######################################################################')
     print('#                    Simple, fixed starting height                    #')
@@ -56,6 +60,17 @@ def main():
     for algorithm in algorithms:
         runner = run(algorithm, 30, True, None)
         run(algorithm, 35, True, runner)
+
+
+def main():
+    global test_no
+    for test_no in range(N):
+        print('''\
+#######################################################################
+###########                  Test no.: {:>2}                   ###########
+#######################################################################'''\
+        .format(test_no))
+        test_once()
 
 if __name__ == "__main__":
     main()
