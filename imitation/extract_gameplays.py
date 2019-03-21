@@ -134,6 +134,11 @@ def self_play_episode(model):
         expert_action = expert_board.last_action
         expert_actions.append(expert_action)
 
+        # May not be a valid move
+        try:
+            board[action] = current_colour
+        except gboard.InvalidMoveError:
+            break
         if board.full():
             break
         winner, _ = board.winner()
