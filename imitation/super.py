@@ -51,7 +51,7 @@ def converter(states, actions):
 
     board[range(board_shape[0]), actions[:, 0], actions[:, 1]] = 1#(board_shape[1] * board_shape[2])-1
 
-    return np.reshape(states, newshape=(states.shape[0],) + (1,) + states.shape[1:]), np.reshape(board, newshape=(board.shape[0],) + (1,) + board.shape[1:])
+    return np.reshape(states, newshape=(states.shape[0],) + states.shape[1:]), np.reshape(board, newshape=(board.shape[0],) + board.shape[1:])
 
 
 def loss(y_true, y_pred):
