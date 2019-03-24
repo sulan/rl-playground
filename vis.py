@@ -25,7 +25,7 @@ test_rewards = g['test_episode_rewards'][:ne // TEST_INTERVAL]
 if not A2C:
     episode_lengths = ee[1:] - ee[:-1]
     episode_lengths = np.r_[ee[0], episode_lengths]
-    eps_mean_loss = np.zeros(ne)
+    eps_max_loss = np.zeros(ne)
     for i,(s,e) in enumerate(zip(np.r_[0,ee[:-1]], ee)):
         eps_max_loss[i] = np.mean(loss[s:e])
 else:
@@ -83,6 +83,7 @@ plt.legend(['clip_loss', 'vf_loss', 'entropy_loss', 'episode_rewards', 'reward_p
 plt.grid(True)
 #  }}} Plot PPO # 
 
+%reset
 #  GC {{{ # 
 import gc
 gc.collect()
