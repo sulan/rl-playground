@@ -290,6 +290,51 @@ class Playerlibrary(object):
         return False
 
     def check_if_immediate_win_possible(self, gui):
+        if len(gui.board.log) > 1:
+            y = gui.board.log[-2][0]
+            x = gui.board.log[-2][1]
+            length = 5
+            for i in range(length):
+                try:
+                    line, positions = gui.board.get_row(y, x - i, length)
+                    if empty in line and line.sum() == self.color * 4:
+                        for pos in positions:
+                            if gui.board[pos] == empty:
+                                return pos
+                        raise RuntimeError("Check the implementation of ``check_if_immediate_win_possible``.")
+                except IndexError:
+                    pass
+                try:
+                    line, positions = gui.board.get_column(y - i, x, length)
+                    if empty in line and line.sum() == self.color * 4:
+                        for pos in positions:
+                            if gui.board[pos] == empty:
+                                return pos
+                        raise RuntimeError("Check the implementation of ``check_if_immediate_win_possible``.")
+                except IndexError:
+                    pass
+                try:
+                    line, positions = gui.board.get_diagonal_upleft_to_lowright(
+                        y - i, x - i, length)
+                    if empty in line and line.sum() == self.color * 4:
+                        for pos in positions:
+                            if gui.board[pos] == empty:
+                                return pos
+                        raise RuntimeError("Check the implementation of ``check_if_immediate_win_possible``.")
+                except IndexError:
+                    pass
+                try:
+                    line, positions = gui.board.get_diagonal_lowleft_to_upright(
+                        y + i, x - i, length)
+                    if empty in line and line.sum() == self.color * 4:
+                        for pos in positions:
+                            if gui.board[pos] == empty:
+                                return pos
+                        raise RuntimeError("Check the implementation of ``check_if_immediate_win_possible``.")
+                except IndexError:
+                    pass
+
+    def check_if_immediate_win_possible2(self, gui):
         """
         Check if it is possible to place a stone such that the player wins
         immediately.
@@ -298,12 +343,11 @@ class Playerlibrary(object):
         """
 
         if len(gui.board.log) < 2:
-            range_height = range(gui.board.height)
-            range_width = range(gui.board.width)
+            range_height = []
+            range_width = []
         else:
             range_height = range(np.maximum(0, gui.board.log[-2][0]-5), np.minimum(gui.board.height, gui.board.log[-2][0]+5))
             range_width = range(np.maximum(0, gui.board.log[-2][1]-5), np.minimum(gui.board.width, gui.board.log[-2][1]+1))
-
 
         for i in range_height:
             for j in range_width:

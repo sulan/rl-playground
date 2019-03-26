@@ -128,6 +128,37 @@ class Board(object):
         return line, [(y-i,x+i) for i in range(length)]
 
     def winner(self):
+        y = self.lastmove[0]
+        x = self.lastmove[1]
+        length = 5
+        for i in range(length):
+            try:
+                line, positions = self.get_row(y, x-i, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+            try:
+                line, positions = self.get_column(y-i, x, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+            try:
+                line, positions = self.get_diagonal_upleft_to_lowright(y-i, x-i, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+            try:
+                line, positions = self.get_diagonal_lowleft_to_upright(y+i, x-i, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+        return None, []
+
+    def winner2(self):
         """
         Return the winner and the positions of the five in a line or None.
 
