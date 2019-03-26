@@ -100,6 +100,10 @@ class Board(object):
     def get_column(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
+        if y < 0:
+            raise IndexError
         for i in range(length):
             line[i] = self[y+i,x]
         return line, [(y+i,x) for i in range(length)]
@@ -107,6 +111,10 @@ class Board(object):
     def get_row(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
+        if y < 0:
+            raise IndexError
         for i in range(length):
             line[i] = self[y,x+i]
         return line, [(y,x+i) for i in range(length)]
@@ -114,6 +122,10 @@ class Board(object):
     def get_diagonal_upleft_to_lowright(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
+        if y < 0:
+            raise IndexError
         for i in range(length):
             line[i] = self[y+i,x+i]
         return line, [(y+i,x+i) for i in range(length)]
@@ -121,6 +133,8 @@ class Board(object):
     def get_diagonal_lowleft_to_upright(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
         if y < length - 1:
             raise IndexError
         for i in range(length):
@@ -133,13 +147,13 @@ class Board(object):
         length = 5
         for i in range(length):
             try:
-                line, positions = self.get_row(y, x-i, length)
+                line, positions = self.get_column(y-i, x, length)
                 if abs(line.sum()) == length:
                     return line[0], positions
             except IndexError:
                 pass
             try:
-                line, positions = self.get_column(y-i, x, length)
+                line, positions = self.get_row(y, x-i, length)
                 if abs(line.sum()) == length:
                     return line[0], positions
             except IndexError:
