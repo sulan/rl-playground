@@ -140,7 +140,7 @@ class Board(object):
         """
         length = 5
         for i in range(np.maximum(0, self.lastmove[0]-length), np.minimum(self.height, self.lastmove[0]+length)):
-            for j in range(np.maximum(0, self.lastmove[1]-length), np.minimum(self.width, self.lastmove[1]+length)):
+            for j in range(np.maximum(0, self.lastmove[1]-length), np.minimum(self.width, self.lastmove[1]+1)):
                 for getter_function in (self.get_row, self.get_column, self.get_diagonal_lowleft_to_upright, self.get_diagonal_upleft_to_lowright):
                     try:
                         line, positions = getter_function(i,j,length)

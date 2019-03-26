@@ -291,13 +291,22 @@ class Playerlibrary(object):
 
     def check_if_immediate_win_possible(self, gui):
         """
-        Check if it is possible to place a stone such thath the player wins
+        Check if it is possible to place a stone such that the player wins
         immediately.
         Return the position to place the stone if possible, otherwise return None.
 
         """
-        for i in range(gui.board.height):
-            for j in range(gui.board.width):
+
+        if len(gui.board.log) < 2:
+            range_height = range(gui.board.height)
+            range_width = range(gui.board.width)
+        else:
+            range_height = range(np.maximum(0, gui.board.log[-2][0]-5), np.minimum(gui.board.height, gui.board.log[-2][0]+5))
+            range_width = range(np.maximum(0, gui.board.log[-2][1]-5), np.minimum(gui.board.width, gui.board.log[-2][1]+1))
+
+
+        for i in range_height:
+            for j in range_width:
                 for f in self.line_getter_functions(gui):
                     try:
                         line, positions = f(i,j)
