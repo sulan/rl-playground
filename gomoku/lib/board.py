@@ -100,6 +100,10 @@ class Board(object):
     def get_column(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
+        if y < 0:
+            raise IndexError
         for i in range(length):
             line[i] = self[y+i,x]
         return line, [(y+i,x) for i in range(length)]
@@ -107,6 +111,10 @@ class Board(object):
     def get_row(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
+        if y < 0:
+            raise IndexError
         for i in range(length):
             line[i] = self[y,x+i]
         return line, [(y,x+i) for i in range(length)]
@@ -114,6 +122,10 @@ class Board(object):
     def get_diagonal_upleft_to_lowright(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
+        if y < 0:
+            raise IndexError
         for i in range(length):
             line[i] = self[y+i,x+i]
         return line, [(y+i,x+i) for i in range(length)]
@@ -121,6 +133,8 @@ class Board(object):
     def get_diagonal_lowleft_to_upright(self, y, x, length=5):
         __doc__ = self.get_line_functions_docstring
         line = np.empty(length, dtype='int8')
+        if x < 0:
+            raise IndexError
         if y < length - 1:
             raise IndexError
         for i in range(length):
@@ -128,6 +142,37 @@ class Board(object):
         return line, [(y-i,x+i) for i in range(length)]
 
     def winner(self):
+        y = self.lastmove[0]
+        x = self.lastmove[1]
+        length = 5
+        for i in range(length):
+            try:
+                line, positions = self.get_column(y-i, x, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+            try:
+                line, positions = self.get_row(y, x-i, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+            try:
+                line, positions = self.get_diagonal_upleft_to_lowright(y-i, x-i, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+            try:
+                line, positions = self.get_diagonal_lowleft_to_upright(y+i, x-i, length)
+                if abs(line.sum()) == length:
+                    return line[0], positions
+            except IndexError:
+                pass
+        return None, []
+
+    def winner2(self):
         """
         Return the winner and the positions of the five in a line or None.
 
@@ -140,7 +185,7 @@ class Board(object):
         """
         length = 5
         for i in range(np.maximum(0, self.lastmove[0]-length), np.minimum(self.height, self.lastmove[0]+length)):
-            for j in range(np.maximum(0, self.lastmove[1]-length), np.minimum(self.width, self.lastmove[1]+length)):
+            for j in range(np.maximum(0, self.lastmove[1]-length), np.minimum(self.width, self.lastmove[1]+1)):
                 for getter_function in (self.get_row, self.get_column, self.get_diagonal_lowleft_to_upright, self.get_diagonal_upleft_to_lowright):
                     try:
                         line, positions = getter_function(i,j,length)
