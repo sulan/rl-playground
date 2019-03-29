@@ -1,30 +1,28 @@
 import json, time, sys
 import numpy as np
 
-from keras.models import Sequential, load_model, Model
-from keras.layers import Dense, Activation, Flatten, Conv2D, Reshape, BatchNormalization
-from keras.optimizers import RMSprop, Adam
+from keras.models import Sequential, Model
+from keras.layers import Dense, Flatten
+from keras.optimizers import Adam
 from keras.utils import CustomObjectScope
 
 from rl.agents.dqn import DQNAgent
 from rl.policy import EpsGreedyQPolicy, LinearAnnealedPolicy
 from rl.memory import SequentialMemory
-import rl.callbacks
 
 from config_parser import ConfigParser
-from dm_env import DumbMars1DEnvironment
 from gomoku_env import GomokuEnvironment
 from gomoku_conv import GomokuConv, GomokuProcessor
 from callbacks import TrainingStatisticsLogger
 from a2c import A2C
 from ppo import PPOLearner
 
-from kaiki_model import create_kaiki_model
+from kaiki_model import create_kaiki_model, load_kaiki_model
 from imitation.super import loss
 
 
 CONFIG = ConfigParser('./config.json')
-BOARD_SIZE = CONFIG.getOption('board_size', [15, 15])
+BOARD_SIZE = CONFIG.getOption('board_size', [16, 16])
 NUM_STEPS = CONFIG.getOption('num_steps', 100)
 # Wether to use the verbose output in keras-rl
 VERBOSE_TRAINING = CONFIG.getOption('verbose_training', 0)
@@ -138,13 +136,8 @@ class Runner(Configurable):
 
     def createAgent(self):
         if INPUT_MODEL is not None:
-            with CustomObjectScope({'GomokuConv' : GomokuConv}):
-                self.model = load_model(INPUT_MODEL)
-                if self.config['model_type'] == 'gomoku':
-                    output = Flatten()(
-                        Reshape((BOARD_SIZE[0], BOARD_SIZE[1]))(
-                            self.model.output))
-                    self.model = Model(inputs=self.model.input, outputs=output)
+            self.model = load_kaiki_model(INPUT_MODEL,
+                                          BOARD_SIZE[0], BOARD_SIZE[1], True)
 
         else:
             self.model = self._createModel()
@@ -255,7 +248,7 @@ class Runner(Configurable):
 def main():
     num_epoch = int(sys.argv[1])
     runner = Runner(GomokuEnvironment)
-    runner.config['epsilon'] = (0.3, 0., 500000)
+    runner.config['epsilon'] = (0.1, 0.1, 500000)
     runner.config['model_type'] = 'gomoku'
     runner.config['algorithm_params']['double_dqn'] = True
     runner.config['env_ctor_params'] = {
