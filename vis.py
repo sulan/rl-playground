@@ -14,9 +14,8 @@ def moving_average(a, n=300):
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-file_name = 'log9/train.out.hdf5'
-#file_name = 'train.out.hdf5'
-#file_name = '/tmp/train.out.hdf5'
+file_name = 'train.out.hdf5'
+file_name = '/tmp/train.out.hdf5'
 A2C = True
 TEST_INTERVAL = 100
 #  Datasets {{{1 #
@@ -32,7 +31,7 @@ test_rewards = g['test_episode_rewards'][:ne // TEST_INTERVAL]
 if not A2C:
     episode_lengths = ee[1:] - ee[:-1]
     episode_lengths = np.r_[ee[0], episode_lengths]
-    eps_max_loss = np.zeros(ne)
+    eps_mean_loss = np.zeros(ne)
     for i,(s,e) in enumerate(zip(np.r_[0,ee[:-1]], ee)):
         eps_mean_loss[i] = np.mean(loss[s:e])
 else:
@@ -93,7 +92,7 @@ plt.legend(['clip_loss', 'vf_loss', 'entropy_loss', 'episode_rewards', 'reward_p
 plt.grid(True)
 #  }}} Plot PPO #
 
-%reset
+#%reset
 #  GC {{{ # 
 import gc
 gc.collect()
