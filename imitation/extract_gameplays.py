@@ -6,6 +6,8 @@ import gomoku.lib.board as gboard
 import gomoku.lib.player as player
 from gomoku.lib.player import PseudoGUI
 
+from rl.policy import GreedyQPolicy
+
 from config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
 
@@ -103,10 +105,12 @@ def extract_ai_gameplays():
     f.flush()
     f.close()
 
-def self_play_episode(model):
+def self_play_episode(model, policy = None):
     """
     Let Kaiki an episode against itself
     """
+    if policy is None:
+        policy = GreedyQPolicy()
     current_colour = gboard.white
     board = MyBoard(*BOARD_SIZE)
     expert = player.c_hard.Hard(current_colour)
@@ -123,8 +127,10 @@ def self_play_episode(model):
 
         # Make a move
         q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
-        q.shape = BOARD_SIZE
-        action = np.unravel_index(np.argmax(q, axis = None), q.shape)
+        # q.shape = BOARD_SIZE
+        q.shape = (-1,)
+        action = policy.select_action(q)
+        action = np.unravel_index(action, BOARD_SIZE)
         states.append(state)
         actions.append(action)
 
