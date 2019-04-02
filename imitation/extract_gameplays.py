@@ -23,6 +23,8 @@ PLAYER_DISTRIBUTION = CONFIG.getOption('player_distribution', [0, 0.5, 0.5])
 assert len(PLAYER_DISTRIBUTION) == 3
 # Output file name
 OUTPUT_NAME = CONFIG.getOption('output_name', 'dataset.hdf5')
+# Whether to start from the middle of the board
+START_FROM_MIDDLE = CONFIG.getOption('start_from_middle', False)
 
 class MyBoard(gboard.Board):
     """
@@ -133,6 +135,7 @@ def self_play_episode(model, policy = None):
     states = []
     actions = []
     expert_actions = []
+    step_middle = START_FROM_MIDDLE
     while True:
         state = [board.board == current_colour,
                  board.board == -current_colour]
@@ -140,10 +143,14 @@ def self_play_episode(model, policy = None):
         expert_board.board = board.board.copy()
 
         # Make a move
-        q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
-        # q.shape = BOARD_SIZE
-        q.shape = (-1,)
-        action_ind = policy.select_action(q)
+        if step_middle:
+            action_ind = (BOARD_SIZE[0] * BOARD_SIZE[1]) // 2
+            step_middle = False
+        else:
+            q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
+            # q.shape = BOARD_SIZE
+            q.shape = (-1,)
+            action_ind = policy.select_action(q)
         action_board = convert_action_to_board(
             action_ind.reshape(1,1), BOARD_SIZE)
         action_board.shape = tuple(BOARD_SIZE)
