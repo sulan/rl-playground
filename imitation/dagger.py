@@ -2,17 +2,17 @@ import sys
 import numpy as np
 
 from keras.utils import CustomObjectScope
-from keras.models import load_model
+from keras.optimizers import adam
 import tqdm
 
 from extract_gameplays import self_play_episode, BOARD_SIZE, CONFIG
-from super import loss, converter
-from kaiki_model import create_kaiki_model, GomokuConv
+from super import loss, converter, converter2
+from kaiki_model import create_kaiki_model, load_kaiki_model, GomokuConv
 
 # Number of episodes self-play in each iteration
-NUM_EPISODES_PER_ITERATION = CONFIG.getOption('num_episodes_per_iteration', 100)
+NUM_EPISODES_PER_ITERATION = CONFIG.getOption('num_episodes_per_iteration', 20)
 # Number of fit epochs to perform in each iteration
-NUM_EPOCHS_PER_ITERATION = CONFIG.getOption('num_epochs_per_iteration', 1000)
+NUM_EPOCHS_PER_ITERATION = CONFIG.getOption('num_epochs_per_iteration', 10)
 # The name of the output file with the model
 OUTPUT_FILE = CONFIG.getOption('dagger_output_file', 'model.hdf5')
 # Input file name (that contains a previously trained model)
@@ -24,9 +24,11 @@ def dagger(num_iterations):
         if INPUT_MODEL is None:
             model = create_kaiki_model((2, BOARD_SIZE[0], BOARD_SIZE[1]))
         else:
-            model = load_model(INPUT_MODEL)
+            model = load_kaiki_model(INPUT_MODEL,
+                                          BOARD_SIZE[0], BOARD_SIZE[1], False)
+    opti = adam()
     model.compile(
-        optimizer='adam',
+        optimizer=opti,
         loss=loss,
         metrics=['mse'])
 
@@ -44,9 +46,10 @@ def dagger(num_iterations):
 
         # Learn
         states, expert_actions = states, expert_actions
-        model.fit(states, expert_actions, batch_size = 2048,
+        states, expert_actions = converter2(states, expert_actions)
+        model.fit(states, expert_actions, batch_size = 32,
                   epochs = NUM_EPOCHS_PER_ITERATION,
-                  callbacks = [], verbose = 0, validation_split = 0.8)
+                  callbacks = [], verbose = 0, validation_split = 1.0)
 
     model.save(OUTPUT_FILE)
 

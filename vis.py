@@ -5,8 +5,14 @@ import numpy as np
 import h5py
 import matplotlib.pyplot as plt
 from scipy.signal import medfilt
-%matplotlib qt5
+#%matplotlib qt5
 #  1}}} #
+
+
+def moving_average(a, n=300):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
 
 file_name = 'train.out.hdf5'
 file_name = '/tmp/train.out.hdf5'
@@ -25,9 +31,9 @@ test_rewards = g['test_episode_rewards'][:ne // TEST_INTERVAL]
 if not A2C:
     episode_lengths = ee[1:] - ee[:-1]
     episode_lengths = np.r_[ee[0], episode_lengths]
-    eps_max_loss = np.zeros(ne)
+    eps_mean_loss = np.zeros(ne)
     for i,(s,e) in enumerate(zip(np.r_[0,ee[:-1]], ee)):
-        eps_max_loss[i] = np.mean(loss[s:e])
+        eps_mean_loss[i] = np.mean(loss[s:e])
 else:
     sorted_inds = np.argsort(ee)
     er = er[sorted_inds]
@@ -48,16 +54,19 @@ plt.xlabel('#step')
 plt.title('loss')
 plt.figure()
 plt.plot(er)
+plt.plot(moving_average(er, 3000), color='red')
 plt.plot(rp)
-plt.plot(eps_max_loss)
-plt.legend(['episode_rewards', 'reward_prediction','loss'])
+plt.plot(eps_mean_loss)
+plt.legend(['episode_rewards', 'ep_rewards MA', 'reward_prediction', 'loss'])
 plt.xlabel('#episode')
 plt.figure()
 plt.plot(test_rewards)
+plt.plot(moving_average(test_rewards, 30), color='red')
 plt.xlabel('#step/100')
 plt.title('Test episode reward')
 plt.figure()
 plt.plot(episode_lengths)
+plt.plot(moving_average(episode_lengths, 3000), color='red')
 plt.title('Episode length')
 plt.xlabel('#episode')
 plt.show()
@@ -81,9 +90,9 @@ plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, '.')
 plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'x')
 plt.legend(['clip_loss', 'vf_loss', 'entropy_loss', 'episode_rewards', 'reward_prediction'])
 plt.grid(True)
-#  }}} Plot PPO # 
+#  }}} Plot PPO #
 
-%reset
+#%reset
 #  GC {{{ # 
 import gc
 gc.collect()
