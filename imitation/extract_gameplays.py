@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import random
 import h5py
 
 import gomoku.lib.board as gboard
@@ -7,6 +8,8 @@ import gomoku.lib.player as player
 from gomoku.lib.player import PseudoGUI
 
 from rl.policy import GreedyQPolicy
+
+from super import convert_action_to_board
 
 from config_parser import ConfigParser
 CONFIG = ConfigParser('./config.json')
@@ -105,6 +108,17 @@ def extract_ai_gameplays():
     f.flush()
     f.close()
 
+def random_state_transform(state, action):
+    r = random.randrange(8)
+    if r < 4:
+        state = np.rot90(state, k = r, axes = (1, 2))
+        action = np.rot90(action, k = r, axes = (0, 1))
+    else:
+        state = np.flip(np.rot90(state, k = r - 4, axes = (1, 2)), axis = 1)
+        action = np.flip(np.rot90(action, k = r - 4, axes = (0, 1)), axis = 0)
+    return state, action
+
+
 def self_play_episode(model, policy = None):
     """
     Let Kaiki an episode against itself
@@ -129,15 +143,22 @@ def self_play_episode(model, policy = None):
         q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
         # q.shape = BOARD_SIZE
         q.shape = (-1,)
-        action = policy.select_action(q)
-        action = np.unravel_index(action, BOARD_SIZE)
+        action_ind = policy.select_action(q)
+        action_board = convert_action_to_board(
+            action_ind.reshape(1,1), BOARD_SIZE)
+        action_board.shape = tuple(BOARD_SIZE)
+        action = np.unravel_index(action_ind, BOARD_SIZE)
+        state, action_board = random_state_transform(state, action_board)
         states.append(state)
-        actions.append(action)
+        actions.append(action_board)
 
         # Let's see the expert's opinion
         expert.color = current_colour
         expert.make_move(expert_gui)
         expert_action = expert_board.last_action
+        expert_action = convert_action_to_board(
+            expert_action.reshape(1,2), BOARD_SIZE)
+        expert_action.shape = tuple(BOARD_SIZE)
         expert_actions.append(expert_action)
 
         # May not be a valid move

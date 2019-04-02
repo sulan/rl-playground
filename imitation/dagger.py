@@ -43,7 +43,7 @@ def dagger(num_iterations):
         expert_actions = np.array(expert_actions)
 
         # Learn
-        states, expert_actions = converter(states, expert_actions)
+        states, expert_actions = states, expert_actions
         model.fit(states, expert_actions, batch_size = 2048,
                   epochs = NUM_EPOCHS_PER_ITERATION,
                   callbacks = [], verbose = 0, validation_split = 0.8)

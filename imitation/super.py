@@ -42,6 +42,31 @@ def converter2(states, actions):
 
     return new_states, new_actions
 
+def convert_action_to_board(actions, board_shape):
+    """
+    Converts action indices to a board representation similar to the output of
+    Kaiki
+
+    # Arguments:
+    action (array-like): A matrix with shape (N, k). If k == 1, then it
+        interprets the rows as row-major indices into the board, if k == 2,
+        then it interprets the rows as (row, column) coordinates into the board
+    board_shape (pair of integers): The shape of the board.
+
+    # Returns:
+        A stack of matrices representing the board for the different actions in
+        the rows of the input, with 1 (white) at the specified actions.
+    """
+    assert len(actions.shape) == 2
+    N = actions.shape[0]
+    output = np.zeros((N,) + board_shape)
+    if actions.shape[1] == 1:
+        actions = np.unravel_index(actions, board_shape)
+        output[range(N), actions[0], actions[1]] = 1
+        return output
+    assert actions.shape[1] == 2
+    output[range(N), actions[:, 0], actions[:, 1]]
+    return output
 
 def converter(states, actions):
 
