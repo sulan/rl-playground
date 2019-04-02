@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 from keras.models import Sequential
-from keras.layers import Dense, Conv2D, Flatten
+from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
 from keras.datasets import mnist
 from keras.utils import to_categorical
+from keras.optimizers import Adam
 
 INPUT_DIM = 2
 OUTPUT_DIM = 2
@@ -130,10 +131,10 @@ plt.legend(['old before fit', 'old after fit', 'new before fit', 'new after fit'
 # Target model
 activation = 'relu'
 target_model = Sequential([
-    Conv2D(100, 3, data_format = 'channels_last', input_shape = (28, 28, 1), activation = activation),
-    Conv2D(100, 3, data_format = 'channels_last', activation = activation),
-    Conv2D(100, 3, data_format = 'channels_last', activation = activation),
-    Conv2D(1, 3, data_format = 'channels_last', activation = activation),
+    Conv2D(20, 3, data_format = 'channels_last', input_shape = (28, 28, 1), activation = activation),
+    Conv2D(20, 3, data_format = 'channels_last', activation = activation),
+    MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
+    Flatten(),
     Dense(OUTPUT_DIM)
     ])
 target_model.compile(optimizer = 'sgd', loss = 'mse')
@@ -143,45 +144,52 @@ target_model.summary()
 def gen_predictor():
     activation = 'relu'
     predictor = Sequential([
-        Conv2D(100, 3, data_format = 'channels_last', input_shape = (28, 28, 1), activation = activation),
-        Conv2D(100, 3, data_format = 'channels_last', activation = activation),
-        Conv2D(100, 3, data_format = 'channels_last', activation = activation),
-        Conv2D(1, 3, data_format = 'channels_last', activation = activation),
+        Conv2D(20, 3, data_format = 'channels_last', input_shape = (28, 28, 1), activation = activation),
+        Conv2D(20, 3, data_format = 'channels_last', activation = activation),
+        MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
+        Flatten(),
         Dense(OUTPUT_DIM)
         ])
-    predictor.compile(optimizer = 'adam', loss = 'mse')
+    predictor.compile(optimizer = Adam(lr = 0.0002), loss = 'mse')
     return predictor
 
 # Dataset
 (X, Y), (X_test, Y_test) = mnist.load_data('/tmp/mnist.npz')
 X_0 = X[Y == 0]
 Y_0 = Y[Y == 0]
-target_class = 1
-X_target = X[Y == target_class]
-Y_target = Y[Y == target_class]
 N = 5000
 num_experiments = 10
 num_proportions = 10
 output0 = np.array([1, 0])
 output1 = np.array([0, 1])
-loss = np.zeros((num_proportions, num_experiments))
+loss = np.zeros((9, num_proportions, num_experiments))
+zero_proportions = np.logspace(-num_proportions + 1, 0, num_proportions)
 for test_no in range(num_experiments):
-    for i, proportion in enumerate(np.linspace(0, 1, num_proportions)):
-        num_0 = int(N * proportion)
-        inds_0 = np.random.choice(X_0.shape[0], size = num_0, replace = False)
-        inds_target = np.random.choice(X_target.shape[0], size = N - num_0,
-                                       replace = False)
-        train_x = np.r_[X_0[inds_0], X_target[inds_target]]
-        train_x.shape += (1,)
-        train_y = target_model.predict(train_x)
-        predictor = gen_predictor()
-        predictor.fit(train_x, train_y)
+    print('Test no.:', test_no)
+    for target_class in range(1, 10):
+        print('Target class:', target_class)
+        X_target = X[Y == target_class]
+        Y_target = Y[Y == target_class]
+        for i, proportion in enumerate(zero_proportions):
+            num_0 = int(N * proportion)
+            inds_0 = np.random.choice(X_0.shape[0], size = num_0,
+                                      replace = False)
+            inds_target = np.random.choice(X_target.shape[0], size = N - num_0,
+                                           replace = False)
+            train_x = np.r_[X_0[inds_0], X_target[inds_target]]
+            train_x.shape += (1,)
+            train_y = target_model.predict(train_x)
+            predictor = gen_predictor()
+            predictor.fit(train_x, train_y)
 
-        test_x = np.r_[X_test[Y_test == 0], X_test[Y_test == target_class]]
-        test_x.shape += (1,)
-        test_y = target_model.predict(test_x)
-        loss[i, test_no] = predictor.evaluate(test_x, test_y)
-plt.plot(np.mean(loss, axis = -1))
+            test_x = X_test[Y_test == 0]
+            test_x.shape += (1,)
+            test_y = target_model.predict(test_x)
+            loss[target_class - 1, i, test_no] = predictor.evaluate(
+                test_x, test_y)
+plt.plot(zero_proportions, np.mean(loss, axis = -1).T, '-x')
+plt.xscale('log')
+plt.savefig('loss.pdf')
 #  }}} MNSIT experiment (from RND paper) #
 
 # vim:set et sw=4 ts=4 fdm=marker:
