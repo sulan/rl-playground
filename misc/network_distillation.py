@@ -160,35 +160,35 @@ Y_0 = Y[Y == 0]
 N = 5000
 num_experiments = 10
 num_proportions = 10
-output0 = np.array([1, 0])
-output1 = np.array([0, 1])
 loss = np.zeros((9, num_proportions, num_experiments))
-zero_proportions = np.logspace(-num_proportions + 1, 0, num_proportions)
+target_nums = np.logspace(0, np.log10(5000), num_proportions, dtype = 'i')
 for test_no in range(num_experiments):
     print('Test no.:', test_no)
     for target_class in range(1, 10):
         print('Target class:', target_class)
         X_target = X[Y == target_class]
         Y_target = Y[Y == target_class]
-        for i, proportion in enumerate(zero_proportions):
-            num_0 = int(N * proportion)
+        for i, num_target in enumerate(target_nums):
+            num_0 = N - num_target
             inds_0 = np.random.choice(X_0.shape[0], size = num_0,
                                       replace = False)
-            inds_target = np.random.choice(X_target.shape[0], size = N - num_0,
+            inds_target = np.random.choice(X_target.shape[0], size = num_target,
                                            replace = False)
             train_x = np.r_[X_0[inds_0], X_target[inds_target]]
             train_x.shape += (1,)
             train_y = target_model.predict(train_x)
             predictor = gen_predictor()
-            predictor.fit(train_x, train_y)
+            predictor.fit(train_x, train_y, verbose = 0)
 
-            test_x = X_test[Y_test == 0]
+            test_x = X_test[Y_test == target_class]
             test_x.shape += (1,)
             test_y = target_model.predict(test_x)
             loss[target_class - 1, i, test_no] = predictor.evaluate(
-                test_x, test_y)
-plt.plot(zero_proportions, np.mean(loss, axis = -1).T, '-x')
+                test_x, test_y, verbose = 0)
+plt.plot(target_nums, np.mean(loss, axis = -1).T, '-x')
+plt.legend(np.arange(9) + 1)
 plt.xscale('log')
+plt.xlabel('# of target samples')
 plt.savefig('loss.pdf')
 #  }}} MNSIT experiment (from RND paper) #
 
