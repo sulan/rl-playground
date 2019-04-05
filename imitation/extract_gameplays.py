@@ -26,6 +26,7 @@ OUTPUT_NAME = CONFIG.getOption('output_name', 'dataset.hdf5')
 # Whether to start from the middle of the board
 START_FROM_MIDDLE = CONFIG.getOption('start_from_middle', False)
 
+
 class MyBoard(gboard.Board):
     """
     Board subclass that remembers the last action.
@@ -38,6 +39,7 @@ class MyBoard(gboard.Board):
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
         self.last_action = np.array(key)
+
 
 def match(players):
     current_player_id = 0
@@ -64,6 +66,7 @@ def match(players):
         current_player_id = 1 - current_player_id
     return states, actions
 
+
 def get_random_player(color):
     player_ctors = [
         player.a_easy.Easy,
@@ -73,6 +76,7 @@ def get_random_player(color):
     return np.random.choice(player_ctors,
                             p = PLAYER_DISTRIBUTION)(color)
 
+
 def generate_some_plays(num):
     states, actions = [], []
     for _ in range(num):
@@ -81,6 +85,7 @@ def generate_some_plays(num):
         states += s
         actions += a
     return states, actions
+
 
 def extract_ai_gameplays():
     max_num_episodes = int(sys.argv[1])
@@ -110,52 +115,55 @@ def extract_ai_gameplays():
     f.flush()
     f.close()
 
-def random_state_transform(state, action):
+
+def random_state_transform(state, action, board):
     r = random.randrange(8)
     if r < 4:
         state = np.rot90(state, k = r, axes = (1, 2))
         action = np.rot90(action, k = r, axes = (0, 1))
+        board = np.rot90(board, k = r, axes = (0, 1))
     else:
         state = np.flip(np.rot90(state, k = r - 4, axes = (1, 2)), axis = 1)
         action = np.flip(np.rot90(action, k = r - 4, axes = (0, 1)), axis = 0)
-    return state, action
+        board = np.flip(np.rot90(board, k = r - 4, axes = (0, 1)), axis = 0)
+    return state, action, board
 
 
 def self_play_episode(model, policy = None):
     """
     Let Kaiki an episode against itself
     """
+    step_middle = START_FROM_MIDDLE
     if policy is None:
         policy = GreedyQPolicy()
     current_colour = gboard.white
     board = MyBoard(*BOARD_SIZE)
+    if step_middle:
+        pass
+        ## TODO
+        #board[BOARD_SIZE[0]//2, BOARD_SIZE[1]//2] = current_colour
+        #current_colour *= -1
     expert = player.c_hard.Hard(current_colour)
     expert_board = MyBoard(*BOARD_SIZE)
     expert_gui = PseudoGUI(expert_board)
     states = []
     actions = []
     expert_actions = []
-    step_middle = START_FROM_MIDDLE
     while True:
         state = [board.board == current_colour,
                  board.board == -current_colour]
         state = np.stack(state)
-        expert_board.board = board.board.copy()
 
         # Make a move
-        if step_middle:
-            action_ind = (BOARD_SIZE[0] * BOARD_SIZE[1]) // 2
-            step_middle = False
-        else:
-            q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
-            # q.shape = BOARD_SIZE
-            q.shape = (-1,)
-            action_ind = policy.select_action(q)
+        q = model.predict(state.reshape(1, 2, *BOARD_SIZE))
+        q.shape = (-1,)
+        action_ind = policy.select_action(q)
         action_board = convert_action_to_board(
             action_ind.reshape(1,1), BOARD_SIZE)
         action_board.shape = tuple(BOARD_SIZE)
         action = np.unravel_index(action_ind, BOARD_SIZE)
-        state, action_board = random_state_transform(state, action_board)
+        state, action_board, expert_board.board = random_state_transform(
+            state, action_board, board.board)
         states.append(state)
         actions.append(action_board)
 
