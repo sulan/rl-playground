@@ -126,7 +126,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                     # Save first state
                     first_observation = np.array(logs['observation'])
                     # It needs to be in the right shape for prediction
-                    first_observation.shape = (1, ) \
+                    first_observation.shape = (1, 1) \
                         + first_observation.shape
                     self.first_observation[logs['actor']] = first_observation
         else:
@@ -140,7 +140,7 @@ class TrainingStatisticsLogger(rl.callbacks.Callback):
                 # Save first state
                 self.first_observation = np.array(logs['observation'])
                 # It needs to be in the right shape for prediction
-                self.first_observation.shape = (1, ) \
+                self.first_observation.shape = (1, 1) \
                     + self.first_observation.shape
 
     def _grow_episode_datasets(self, episode):
