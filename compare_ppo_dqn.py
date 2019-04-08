@@ -1,6 +1,8 @@
 import numpy as np
 np.random.seed(1)
 
+from keras.optimizers import Adam
+
 from train import Runner
 from dm_env import DumbMars1DEnvironment
 
@@ -39,6 +41,7 @@ def run(algorithm, starting_height, random_start = False, runner = None):
     runner.config['env_ctor_params']['random_start'] = random_start
     runner.config['algorithm_params'] = dict(ALGORITHM_PARAMS[algorithm])
     runner.config['measurement_name'] = measurement_name
+    runner.config['optimizer'] = Adam(lr = 0.0002)
     runner.createAgent()
     runner.fit(NUM_STEPS)
     mean, variance = runner.test(num_episodes = 5)
@@ -264,9 +267,6 @@ def visualise(fname):
     with h5py.File(fname, 'r') as f:
         # visualise_generalisation(f)
         visualise_fixed(f)
-
-visualise('/tmp/train.out.hdf5')
-
 #  1}}} #
 
 if __name__ == "__main__":
