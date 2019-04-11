@@ -41,8 +41,9 @@ def load_kaiki_model(model_file, x=16, y=16, flatten=False):
     return Model(inputs=model.input, outputs=output)
 
 
-def create_kaiki_model(state_shape):
+def create_kaiki_model(state_shape, flatten=False):
     inputs = Input(shape = state_shape)
+
     s = GomokuConv(filters=128, kernel_size=9, use_bias=True) (inputs)
 
     #c0 = Conv2D(512, (9, 9), padding='same', data_format='channels_first')(reshape)
@@ -123,6 +124,9 @@ def create_kaiki_model(state_shape):
     outputs = Conv2D(1, (1, 1), padding='same', data_format='channels_first',
                      use_bias=True)(s11)
     outputs = Reshape((16, 16), name='resize_shape')(outputs)
+
+    if flatten:
+        outputs = Flatten(name='flatten_shape')(outputs)
 
     model = Model(inputs=[inputs], outputs=[outputs])
 
