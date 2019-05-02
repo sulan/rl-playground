@@ -10,6 +10,8 @@ from keras.utils import to_categorical
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping
 
+from sklearn.neighbors import BallTree
+
 INPUT_DIM = 2
 OUTPUT_DIM = 2
 N = 2000
@@ -285,5 +287,59 @@ for i in range(2):
     plt.xlabel('# of target samples')
 plt.savefig('loss.pdf')
 # }}} MNSIT experiment (from RND paper) #
+
+#  KNN novelty vs loss {{{ #
+def KNN_novelty(base_class, target_class, num_experiments = 1, k = 10):
+    num_proportions = 10
+    # 1st axis: target - zero, every other class - zero: min/max
+    loss = np.zeros((num_proportions, 3, num_experiments))
+    target_nums = np.logspace(0, np.log10(5000), num_proportions, dtype = 'i')
+    num_base = 5000
+    X_base = X[Y == base_class]
+    X_target = X[Y == target_class]
+    other_classes = [i for i in range(10)
+                     if i not in (base_class, target_class)]
+    other_class_inds_test = [(Y_test == i).nonzero() for i in other_classes]
+    progbar = tqdm.tqdm(total = num_experiments * num_proportions,
+                        desc = 'Progress',
+                        bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
+    def one_measurement(test_no):
+        for i, num_target in enumerate(target_nums):
+            progbar.update()
+            inds_base = np.random.choice(X_base.shape[0], size = num_base,
+                                         replace = False)
+            inds_target = np.random.choice(X_target.shape[0], size = num_target,
+                                           replace = False)
+            train_x = np.r_[X_base[inds_base], X_target[inds_target]]
+            train_x.shape = (-1, 28*28)
+            tree = BallTree(train_x)
+
+            dists, _ = tree.query(X_test.reshape(-1, 28*28), k = k)
+            scores = np.mean(dists, axis = -1)
+            score_base = np.mean(scores[Y_test == base_class])
+            score_target = np.mean(scores[Y_test == target_class])
+            score_others = [np.mean(scores[inds])
+                            for inds in other_class_inds_test]
+            loss[i, 0, test_no] = score_target - score_base
+            loss[i, 1, test_no] = min(score_others) - score_base
+            loss[i, 2, test_no] = max(score_others) - score_base
+
+    for test_no in range(num_experiments):
+        one_measurement(test_no)
+
+    return target_nums, loss
+
+target_nums, loss = KNN_novelty(base_class = 0, target_class = 1,
+                                num_experiments = 1)
+loss_mean = np.mean(loss, axis = -1)
+plt.figure()
+plt.plot(target_nums, loss_mean[:, 0], label = 'novelty of target')
+plt.plot(target_nums, loss_mean[:, 1], label = 'novelty of others (min)')
+plt.plot(target_nums, loss_mean[:, 2], label = 'novelty of others (max)')
+plt.legend()
+plt.xscale('log')
+plt.xlabel('# of target samples')
+plt.savefig('loss.pdf')
+#  }}} KNN novelty vs loss #
 
 # vim:set et sw=4 ts=4 fdm=marker:
