@@ -53,7 +53,7 @@ def convert_action_to_board(actions, board_shape):
         output[range(N), actions[0], actions[1]] = 1
         return output
     assert actions.shape[1] == 2
-    output[range(N), actions[:, 0], actions[:, 1]]
+    output[range(N), actions[:, 0], actions[:, 1]] = 1
     return output
 
 def converter(states, actions):

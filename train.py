@@ -103,7 +103,7 @@ class Runner(Configurable):
         elif self.config['model_type'] == 'gomoku':
             assert self.config['algorithm'] == 'DQN', \
                 'Kaiki doesn''t support A2C yet.'
-            model = create_kaiki_model(self.env_cls.NUM_SENSORS)
+            model = create_kaiki_model(self.env_cls.NUM_SENSORS, flatten=True)
         else:
             raise ValueError(self.config['model_type'])
         return model
