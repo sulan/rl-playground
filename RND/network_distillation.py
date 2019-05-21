@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import tqdm
+import joblib
 
 from keras.models import Sequential, Model
 from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
@@ -169,7 +170,7 @@ def train_classifier(classifier):
     print('Test accuracy:', np.mean(Y_test == Y_test_pred))
 
 # Target model
-def gen_target(shared = None):
+def gen_target(shared = None, train = True):
     activation = 'relu'
     if not shared:
         shared = Sequential([
@@ -179,23 +180,26 @@ def gen_target(shared = None):
             MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
             Flatten(),
             ])
-        features = shared.output
-        classifier_out = Dense(20, input_shape = features.shape,
-                               activation = activation)(features)
-        classifier_out = Dense(10, input_shape = classifier_out.shape,
-                               activation = 'softmax')(classifier_out)
-        classifier = Model(inputs = shared.input, outputs = classifier_out)
-        classifier.compile(optimizer = Adam(lr = 0.0002),
-                           loss = 'categorical_crossentropy')
-        train_classifier(classifier)
+        features = shared.outputs[0]
+        if train:
+            classifier_out = Dense(20, input_shape = features.shape,
+                                   activation = activation)(features)
+            classifier_out = Dense(10, input_shape = classifier_out.shape,
+                                   activation = 'softmax')(classifier_out)
+            classifier = Model(inputs = shared.input, outputs = classifier_out)
+            classifier.compile(optimizer = Adam(lr = 0.0002),
+                               loss = 'categorical_crossentropy')
+            train_classifier(classifier)
         for layer in shared.layers:
             layer.trainable = False
-    features = shared.output
+    features = shared.outputs[0]
     target_out = Dense(20, input_shape = features.shape,
                        activation = activation)(features)
+    target_out = Dense(20, activation = activation)(target_out)
+    target_out = Dense(20, activation = activation)(target_out)
     target_out = Dense(OUTPUT_DIM, input_shape = target_out.shape,
                        activation = 'linear')(target_out)
-    target = Model(inputs = shared.input, outputs = target_out)
+    target = Model(inputs = shared.inputs[0], outputs = target_out)
     target.compile('sgd', 'mse')
     return shared, target
 
@@ -203,12 +207,14 @@ def gen_target(shared = None):
 def gen_predictor(shared = None):
     activation = 'relu'
     if shared:
-        features = shared.output
+        features = shared.outputs[0]
         predictor_out = Dense(20, input_shape = features.shape,
                               activation = activation)(features)
+        predictor_out = Dense(20, activation = activation)(predictor_out)
+        predictor_out = Dense(20, activation = activation)(predictor_out)
         predictor_out = Dense(OUTPUT_DIM, input_shape = predictor_out.shape,
                               activation = 'softmax')(predictor_out)
-        predictor = Model(inputs = shared.input, outputs = predictor_out)
+        predictor = Model(inputs = shared.inputs[0], outputs = predictor_out)
     else:
         predictor = Sequential([
             Conv2D(20, 3, data_format = 'channels_last',
@@ -218,30 +224,36 @@ def gen_predictor(shared = None):
             MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
             Flatten(),
             Dense(20, activation = activation),
+            Dense(20, activation = activation),
+            Dense(20, activation = activation),
             Dense(OUTPUT_DIM),
             ])
     predictor.compile(optimizer = Adam(lr = 0.0002), loss = 'mse')
     return predictor
 
+#  novelty_vs_loss {{{2 #
 def novelty_vs_loss(base_class, target_class, num_experiments = 50,
                     shared_model = None):
-    num_proportions = 10
+    num_proportions = 5
     # 0th axis: shared vs not shared
-    # 2nd axis: target - zero, every other class - zero: min/max
-    loss = np.zeros((2, num_proportions, 3, num_experiments))
+    # 2nd axis: target, every other class: min/max; base
+    loss = np.zeros((2, num_proportions, 4, num_experiments))
     target_nums = np.logspace(0, np.log10(5000), num_proportions, dtype = 'i')
     X_base = X[Y == base_class]
     X_target = X[Y == target_class]
     other_classes = [i for i in range(10)
                      if i not in (base_class, target_class)]
     other_class_inds_test = [(Y_test == i).nonzero() for i in other_classes]
-    progbar = tqdm.tqdm(total = num_experiments * num_proportions * 2,
-                        desc = 'Progress',
-                        bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
+    # progbar = tqdm.tqdm(total = num_experiments * num_proportions * 2,
+    # progbar = tqdm.tqdm(total = num_experiments * 1 * 2,
+    #                     desc = 'Progress',
+    #                     bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
     def one_measurement(test_no, shared):
+        result = np.zeros((num_proportions, 4))
         for i, num_target in enumerate(target_nums):
-            progbar.update()
-            _, target_model = gen_target(shared_model)
+            # progbar.update()
+            _, target_model = gen_target(shared_model if shared else None,
+                                         train = shared)
             predictor = gen_predictor(shared_model if shared else None)
             num_base = 5000
             inds_base = np.random.choice(X_base.shape[0], size = num_base,
@@ -250,7 +262,8 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
                                            replace = False)
             train_x = np.r_[X_base[inds_base], X_target[inds_target]]
             train_y = target_model.predict(train_x)
-            predictor.fit(train_x, train_y, verbose = 0)
+            predictor.fit(train_x, train_y, epochs = 100, verbose = test_no == 0,
+                          callbacks = [EarlyStopping(monitor = 'loss')])
 
             test_target_vals = target_model.predict(X_test)
             test_predict_vals = predictor.predict(X_test)
@@ -259,28 +272,42 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
             score_target = np.mean(scores[Y_test == target_class])
             score_others = [np.mean(scores[inds])
                             for inds in other_class_inds_test]
-            loss[int(shared), i, 0, test_no] = score_target - score_base
-            loss[int(shared), i, 1, test_no] = min(score_others) - score_base
-            loss[int(shared), i, 2, test_no] = max(score_others) - score_base
+            result[i, 0] = score_target
+            result[i, 1] = min(score_others)
+            result[i, 2] = max(score_others)
+            result[i, 3] = score_base
+        return result
 
-    for test_no in range(num_experiments):
-        one_measurement(test_no, shared = False)
-    for test_no in range(num_experiments):
-        one_measurement(test_no, shared = True)
+    # for test_no in range(num_experiments):
+    #     one_measurement(test_no, shared = False)
+    # for test_no in range(num_experiments):
+    #     one_measurement(test_no, shared = True)
+    backend = 'loky'
+    r = joblib.Parallel(n_jobs = 4, backend = backend, verbose = 51)(
+        joblib.delayed(one_measurement)(test_no, False)
+        for test_no in range(num_experiments))
+    loss[0, :, :, :] = np.transpose(r, axes = (1, 2, 0))
+    r = joblib.Parallel(n_jobs = 4, backend = backend, verbose = 51)(
+        joblib.delayed(one_measurement)(test_no, True)
+        for test_no in range(num_experiments))
+    loss[1, :, :, :] = np.transpose(r, axes = (1, 2, 0))
 
     return target_nums, loss
+#  2}}} #
 
 shared, _ = gen_target()
 target_nums, loss = novelty_vs_loss(base_class = 0, target_class = 1,
-                                    num_experiments = 20,
+                                    num_experiments = 30,
                                     shared_model = shared)
-loss_mean = np.mean(loss, axis = -1)
+# TODO check variance of output
+loss_mean = np.median(loss, axis = -1)
 plt.figure()
 for i in range(2):
     plt.subplot(1, 2, i + 1)
     plt.plot(target_nums, loss_mean[i, :, 0], label = 'loss of target')
     plt.plot(target_nums, loss_mean[i, :, 1], label = 'loss of others (min)')
     plt.plot(target_nums, loss_mean[i, :, 2], label = 'loss of others (max)')
+    plt.plot(target_nums, loss_mean[i, :, 3], label = 'loss of base')
     plt.title(['Not shared', 'Shared'][i])
     plt.legend()
     plt.xscale('log')
@@ -329,7 +356,7 @@ def KNN_novelty(base_class, target_class, num_experiments = 1, k = 10):
 
     return target_nums, loss
 
-target_nums, loss = KNN_novelty(base_class = 0, target_class = 1,
+target_nums, loss = KNN_novelty(base_class = 1, target_class = 0,
                                 num_experiments = 1)
 loss_mean = np.mean(loss, axis = -1)
 plt.figure()
