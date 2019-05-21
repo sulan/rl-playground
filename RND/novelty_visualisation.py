@@ -122,10 +122,12 @@ def gen_novelty_gdf(novelties, Y, fname):
 
 X_sne = tsne(X_small)
 plot_embedding(X_sne, Y_small)
+plt.title('pixel space')
 
 X_feat = shared.predict(X[small_inds, :, :, :])
 X_feat_sne = tsne(X_feat)
 plot_embedding(X_feat_sne, Y_small)
+plt.title('feature space')
 
 X_rand = target.predict(X[small_inds, :, :, :])
 
