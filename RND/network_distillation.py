@@ -342,4 +342,70 @@ plt.xlabel('# of target samples')
 plt.savefig('loss.pdf')
 #  }}} KNN novelty vs loss #
 
+#  Novelty vs autoencoder feature loss {{{ #
+def novelty_vs_autoencoder_loss(base_class, target_class, encoder,
+                                num_experiments = 50):
+    num_proportions = 10
+    # 1st axis: target - zero, every other class - zero: min/max
+    loss = np.zeros((num_proportions, 3, num_experiments))
+    target_nums = np.logspace(0, np.log10(5000), num_proportions, dtype = 'i')
+    X_base = X[Y == base_class]
+    X_target = X[Y == target_class]
+    other_classes = [i for i in range(10)
+                     if i not in (base_class, target_class)]
+    other_class_inds_test = [(Y_test == i).nonzero() for i in other_classes]
+    progbar = tqdm.tqdm(total = num_experiments * num_proportions,
+                        desc = 'Progress',
+                        bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
+    def one_measurement(test_no):
+        for i, num_target in enumerate(target_nums):
+            progbar.update()
+            _, target_model = gen_target(encoder)
+            predictor = gen_predictor(encoder)
+            num_base = 5000
+            inds_base = np.random.choice(X_base.shape[0], size = num_base,
+                                         replace = False)
+            inds_target = np.random.choice(X_target.shape[0], size = num_target,
+                                           replace = False)
+            train_x = np.r_[X_base[inds_base], X_target[inds_target]]
+            train_y = target_model.predict(train_x)
+            predictor.fit(train_x, train_y, verbose = 0)
+
+            test_target_vals = target_model.predict(X_test)
+            test_predict_vals = predictor.predict(X_test)
+            scores = (test_target_vals - test_predict_vals)**2
+            score_base = np.mean(scores[Y_test == base_class])
+            score_target = np.mean(scores[Y_test == target_class])
+            score_others = [np.mean(scores[inds])
+                            for inds in other_class_inds_test]
+            loss[i, 0, test_no] = score_target - score_base
+            loss[i, 1, test_no] = min(score_others) - score_base
+            loss[i, 2, test_no] = max(score_others) - score_base
+
+    for test_no in range(num_experiments):
+        one_measurement(test_no)
+
+    return target_nums, loss
+
+# FIXME freeze encoder
+target_nums, loss = novelty_vs_autoencoder_loss(base_class = 0,
+                                                target_class = 1,
+                                                encoder = encoder,
+                                                num_experiments = 20)
+loss_mean = np.mean(loss, axis = -1)
+loss_var = np.var(loss, axis = -1)
+plt.figure()
+plt.plot(target_nums, loss_mean[:, 0], label = 'loss of target')
+plt.plot(target_nums, loss_mean[:, 1], label = 'loss of others (min)')
+plt.plot(target_nums, loss_mean[:, 2], label = 'loss of others (max)')
+plt.plot(target_nums, loss_mean[:, 0] + loss_var[:, 0]**0.5, ':',
+         label = 'var of target')
+plt.plot(target_nums, loss_mean[:, 0] - loss_var[:, 0]**0.5, ':',
+         label = 'var of target')
+plt.legend()
+plt.xscale('log')
+plt.xlabel('# of target samples')
+plt.savefig('loss.pdf')
+#  }}} Novelty vs autoencoder feature loss #
+
 # vim:set et sw=4 ts=4 fdm=marker:
