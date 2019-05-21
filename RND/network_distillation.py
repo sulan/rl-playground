@@ -151,7 +151,9 @@ plt.legend(['old before fit', 'old after fit', 'new before fit', 'new after fit'
 (X, Y), (X_test, Y_test) = mnist.load_data('/tmp/mnist.npz')
 # Add channel count
 X.shape += (1,)
+X /= 255
 X_test.shape += (1,)
+X_test /= 255
 
 def train_classifier(classifier):
     print('Training classifier...')
