@@ -5,11 +5,13 @@ import tqdm
 import joblib
 
 from keras.models import Sequential, Model
-from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
+from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D, Input
 from keras.datasets import mnist
 from keras.utils import to_categorical
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping
+from keras.losses import categorical_crossentropy
+import keras.backend as K
 
 from sklearn.neighbors import BallTree
 
@@ -151,9 +153,10 @@ plt.legend(['old before fit', 'old after fit', 'new before fit', 'new after fit'
 (X, Y), (X_test, Y_test) = mnist.load_data('/tmp/mnist.npz')
 # Add channel count
 X.shape += (1,)
-X /= 255
+X = X.astype(np.float32) / 255
 X_test.shape += (1,)
-X_test /= 255
+X_test = X_test.astype(np.float32) / 255
+activation = 'relu'
 
 def train_classifier(classifier):
     print('Training classifier...')
@@ -171,104 +174,86 @@ def train_classifier(classifier):
     Y_test_pred = np.argmax(Y_test_pred, axis = -1)
     print('Test accuracy:', np.mean(Y_test == Y_test_pred))
 
-# Target model
-def gen_target(shared = None, train = True):
-    activation = 'relu'
-    if not shared:
-        shared = Sequential([
-            Conv2D(20, 3, data_format = 'channels_last', input_shape = (28, 28, 1),
-                   activation = activation),
-            Conv2D(20, 3, data_format = 'channels_last', activation = activation),
-            MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
-            Flatten(),
-            ])
-        features = shared.outputs[0]
-        if train:
-            classifier_out = Dense(20, input_shape = features.shape,
-                                   activation = activation)(features)
-            classifier_out = Dense(10, input_shape = classifier_out.shape,
-                                   activation = 'softmax')(classifier_out)
-            classifier = Model(inputs = shared.input, outputs = classifier_out)
-            classifier.compile(optimizer = Adam(lr = 0.0002),
-                               loss = 'categorical_crossentropy')
-            train_classifier(classifier)
-        for layer in shared.layers:
-            layer.trainable = False
-    features = shared.outputs[0]
-    target_out = Dense(20, input_shape = features.shape,
-                       activation = activation)(features)
-    target_out = Dense(20, activation = activation)(target_out)
-    target_out = Dense(20, activation = activation)(target_out)
-    target_out = Dense(OUTPUT_DIM, input_shape = target_out.shape,
-                       activation = 'linear')(target_out)
-    target = Model(inputs = shared.inputs[0], outputs = target_out)
-    target.compile('sgd', 'mse')
-    return shared, target
+def gen_feature_extractor():
+    return Sequential([
+        Conv2D(20, 3, data_format = 'channels_last', input_shape = (28, 28, 1),
+               activation = activation),
+        Conv2D(20, 3, data_format = 'channels_last', activation = activation),
+        MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
+        Flatten(),
+        ])
 
-# Predictor network
-def gen_predictor(shared = None):
-    activation = 'relu'
-    if shared:
-        features = shared.outputs[0]
-        predictor_out = Dense(20, input_shape = features.shape,
-                              activation = activation)(features)
-        predictor_out = Dense(20, activation = activation)(predictor_out)
-        predictor_out = Dense(20, activation = activation)(predictor_out)
-        predictor_out = Dense(OUTPUT_DIM, input_shape = predictor_out.shape,
-                              activation = 'softmax')(predictor_out)
-        predictor = Model(inputs = shared.inputs[0], outputs = predictor_out)
+def pretrain():
+    feature_extractor = gen_feature_extractor()
+    classifier = Sequential([
+        feature_extractor,
+        Dense(20, activation = activation),
+        Dense(10, activation = 'softmax'),
+        ])
+    def loss(y_true, y_pred):
+        l = categorical_crossentropy(y_true, y_pred)
+        l += K.sum(K.square(y_pred), axis = -1)
+        return l
+    classifier.compile(optimizer = Adam(0.0002),
+                       loss = loss)
+    train_classifier(classifier)
+    return feature_extractor
+
+def gen_target(feature_space = False):
+    target = Sequential()
+    if not feature_space:
+        target.add(gen_feature_extractor())
+        assert K.int_shape(target.outputs[0])[1:] == (720,)
     else:
-        predictor = Sequential([
-            Conv2D(20, 3, data_format = 'channels_last',
-                   input_shape = (28, 28, 1), activation = activation),
-            Conv2D(20, 3, data_format = 'channels_last',
-                   activation = activation),
-            MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
-            Flatten(),
-            Dense(20, activation = activation),
-            Dense(20, activation = activation),
-            Dense(20, activation = activation),
-            Dense(OUTPUT_DIM),
-            ])
-    predictor.compile(optimizer = Adam(lr = 0.0002), loss = 'mse')
-    return predictor
+        # Approximately the same number of parameters
+        target.add(Dense((3820 + 720*20) // 740, input_shape = (720,),
+                         activation = activation))
+    target.add(Dense(20, activation = activation))
+    target.add(Dense(20, activation = activation))
+    target.add(Dense(OUTPUT_DIM, activation = 'linear'))
+    target.compile('sgd', 'mse')
+    return target
 
 #  novelty_vs_loss {{{2 #
 def novelty_vs_loss(base_class, target_class, num_experiments = 50,
                     shared_model = None):
+    print('Novelty vs loss, base {} target{}'.format(base_class, target_class))
     num_proportions = 5
     # 0th axis: shared vs not shared
     # 2nd axis: target, every other class: min/max; base
     loss = np.zeros((2, num_proportions, 4, num_experiments))
     target_nums = np.logspace(0, np.log10(5000), num_proportions, dtype = 'i')
     X_base = X[Y == base_class]
+    X_base_feat = X_feat[Y == base_class]
     X_target = X[Y == target_class]
+    X_target_feat = X_feat[Y == target_class]
     other_classes = [i for i in range(10)
                      if i not in (base_class, target_class)]
     other_class_inds_test = [(Y_test == i).nonzero() for i in other_classes]
-    # progbar = tqdm.tqdm(total = num_experiments * num_proportions * 2,
-    # progbar = tqdm.tqdm(total = num_experiments * 1 * 2,
-    #                     desc = 'Progress',
-    #                     bar_format = '{l_bar}{bar}| [{elapsed}<{remaining}{postfix}]')
     def one_measurement(test_no, shared):
         result = np.zeros((num_proportions, 4))
         for i, num_target in enumerate(target_nums):
-            # progbar.update()
-            _, target_model = gen_target(shared_model if shared else None,
-                                         train = shared)
-            predictor = gen_predictor(shared_model if shared else None)
+            # Use a smaller network (only the FC part) in the feature space
+            target_model = gen_target(feature_space = shared)
+            predictor = gen_target(feature_space = shared)
+            target_model.summary()
             num_base = 5000
-            inds_base = np.random.choice(X_base.shape[0], size = num_base,
+            input_base = X_base_feat if shared else X_base
+            inds_base = np.random.choice(input_base.shape[0], size = num_base,
                                          replace = False)
-            inds_target = np.random.choice(X_target.shape[0], size = num_target,
+            input_target = X_target_feat if shared else X_target
+            inds_target = np.random.choice(input_target.shape[0],
+                                           size = num_target,
                                            replace = False)
-            train_x = np.r_[X_base[inds_base], X_target[inds_target]]
+            train_x = np.r_[input_base[inds_base], input_target[inds_target]]
             train_y = target_model.predict(train_x)
-            predictor.fit(train_x, train_y, epochs = 100, verbose = test_no == 0,
+            predictor.fit(train_x, train_y, epochs = 100,
+                          verbose = test_no == 0,
                           callbacks = [EarlyStopping(monitor = 'loss')])
 
-            test_target_vals = target_model.predict(X_test)
-            test_predict_vals = predictor.predict(X_test)
+            input_test = X_test_feat if shared else X_test
+            test_target_vals = target_model.predict(input_test)
+            test_predict_vals = predictor.predict(input_test)
             scores = (test_target_vals - test_predict_vals)**2
             score_base = np.mean(scores[Y_test == base_class])
             score_target = np.mean(scores[Y_test == target_class])
@@ -280,10 +265,6 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
             result[i, 3] = score_base
         return result
 
-    # for test_no in range(num_experiments):
-    #     one_measurement(test_no, shared = False)
-    # for test_no in range(num_experiments):
-    #     one_measurement(test_no, shared = True)
     backend = 'loky'
     r = joblib.Parallel(n_jobs = 4, backend = backend, verbose = 51)(
         joblib.delayed(one_measurement)(test_no, False)
@@ -297,11 +278,12 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
     return target_nums, loss
 #  2}}} #
 
-shared, _ = gen_target()
+shared = pretrain()
+X_feat = shared.predict(X)
+X_test_feat = shared.predict(X_test)
 target_nums, loss = novelty_vs_loss(base_class = 0, target_class = 1,
-                                    num_experiments = 30,
+                                    num_experiments = 20,
                                     shared_model = shared)
-# TODO check variance of output
 loss_mean = np.median(loss, axis = -1)
 plt.figure()
 for i in range(2):
