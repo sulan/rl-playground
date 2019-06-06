@@ -4,11 +4,12 @@ import tqdm
 
 from keras.models import Sequential, Model
 from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D, Input
-from keras.layers import Conv2DTranspose, Activation, Reshape
+from keras.layers import Conv2DTranspose, Activation, Reshape, Lambda
 from keras.datasets import mnist
 from keras.utils import to_categorical
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping
+import keras.losses
 import keras.backend as K
 
 #  MNIST data {{{1 #
@@ -52,17 +53,27 @@ def get_model():
     x = Conv2DTranspose(filters = 1, kernel_size = kernel_size,
                         strides = strides,
                         padding = 'same')(x)
+    def sparsity_loss(_, y_pred):
+        # L2
+        # return K.sum(K.square(y_pred), axis = -1)
+        # L1
+        return K.sum(K.abs(y_pred), axis = -1)
     outputs = Activation('sigmoid', name = 'decoder_output')(x)
     decoder = Model(inputs = latent_inputs, outputs = outputs, name = 'decoder')
-    autoencoder = Model(inputs, decoder(encoder(inputs)), name = 'autoencoder')
-    autoencoder.compile(loss = 'mse', optimizer = Adam(0.0002))
+    hidden = encoder(inputs)
+    autoencoder = Model(inputs, [decoder(hidden), hidden], name = 'autoencoder')
+    autoencoder.compile(loss = {'decoder': 'mse', 'encoder': sparsity_loss},
+                        optimizer = Adam(0.0002))
     return encoder, decoder, autoencoder
 encoder, decoder, autoencoder = get_model()
 #  }}} Model #
 
 #  Fit {{{ #
-autoencoder.fit(X, X, epochs = 100,
-                validation_data = (X_test, X_test),
+autoencoder.fit(X, {'decoder': X, 'encoder': np.zeros((len(X), 0))},
+                epochs = 100,
+                validation_data = [X_test, {
+                    'decoder' : X_test,
+                    'encoder' : np.zeros((len(X_test), 0))}],
                 callbacks = [EarlyStopping(patience = 5)])
 #  }}} Fit #
 

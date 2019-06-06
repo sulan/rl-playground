@@ -161,16 +161,22 @@ activation = 'relu'
 def train_classifier(classifier):
     print('Training classifier...')
     Y_ = to_categorical(Y, 10)
-    classifier.fit(X.reshape((-1, 28, 28, 1)), Y_, epochs = 25000,
+    classifier.fit(X.reshape((-1, 28, 28, 1)),
+                   {
+                       'y_pred': Y_,
+                       'features': np.zeros((len(X), 0))},
+                   epochs = 25000,
                    validation_split = 0.1,
                    callbacks = [EarlyStopping(patience = 5)],
                    verbose = 1)
     Y_test_ = to_categorical(Y_test, 10)
     score = classifier.evaluate(
-        X_test.reshape((-1, 28, 28, 1)), Y_test_, verbose = 0)
+        X_test.reshape((-1, 28, 28, 1)),
+        {'y_pred': Y_test_, 'features': np.zeros((len(X_test), 0))},
+        verbose = 0)
     print('Test loss:', score)
     Y_test_pred = classifier.predict(X_test.reshape((-1, 28, 28, 1)),
-                                     verbose = 0)
+                                     verbose = 0)[0]
     Y_test_pred = np.argmax(Y_test_pred, axis = -1)
     print('Test accuracy:', np.mean(Y_test == Y_test_pred))
 
@@ -181,32 +187,48 @@ def gen_feature_extractor():
         Conv2D(20, 3, data_format = 'channels_last', activation = activation),
         MaxPooling2D(pool_size = (4, 4), data_format = 'channels_last'),
         Flatten(),
-        ])
+        ], name = 'features')
 
 def pretrain():
     feature_extractor = gen_feature_extractor()
-    classifier = Sequential([
-        feature_extractor,
-        Dense(20, activation = activation),
-        Dense(10, activation = 'softmax'),
-        ])
-    def loss(y_true, y_pred):
-        l = categorical_crossentropy(y_true, y_pred)
-        l += K.sum(K.square(y_pred), axis = -1)
-        return l
+    inputs = Input(shape = (28, 28, 1))
+    features = feature_extractor(inputs)
+    x = Dense(20, activation = activation)(features)
+    x = Dense(10, activation = 'softmax', name = 'y_pred')(x)
+    def sparsity_loss(_, y_pred):
+        # L2
+        # return K.sum(K.square(y_pred), axis = -1)
+        # L1
+        return K.sum(K.abs(y_pred), axis = -1)
+    classifier = Model(inputs, [x, features])
+    classifier.summary()
     classifier.compile(optimizer = Adam(0.0002),
-                       loss = loss)
+                       loss = {
+                           'y_pred': 'categorical_crossentropy',
+                           'features': sparsity_loss},
+                       loss_weights = {
+                           'y_pred': 1,
+                           'features': 0.01})
     train_classifier(classifier)
     return feature_extractor
 
-def gen_target(feature_space = False):
+def gen_target(feature_space_size = None):
+    """
+    # Arguments:
+    feature_space_size (int): size of the feature space. If None, then
+        assumes it is the pixel space and adds a feature extractor layer (2
+        conv and a maxpool).
+    """
     target = Sequential()
-    if not feature_space:
+    if not feature_space_size:
         target.add(gen_feature_extractor())
         assert K.int_shape(target.outputs[0])[1:] == (720,)
     else:
         # Approximately the same number of parameters
-        target.add(Dense((3820 + 720*20) // 740, input_shape = (720,),
+        # target.add(Dense((3820 + 720*20) // 740, input_shape = (720,),
+        # target.add(Dense((3820 + 720*20) // 40, input_shape = (20,),
+        target.add(Dense((3820 + 720*20) // (feature_space_size + 20),
+                         input_shape = (feature_space_size,),
                          activation = activation))
     target.add(Dense(20, activation = activation))
     target.add(Dense(20, activation = activation))
@@ -215,33 +237,38 @@ def gen_target(feature_space = False):
     return target
 
 #  novelty_vs_loss {{{2 #
-def novelty_vs_loss(base_class, target_class, num_experiments = 50,
-                    shared_model = None):
+def novelty_vs_loss(base_class, target_class, num_experiments = 50):
     print('Novelty vs loss, base {} target{}'.format(base_class, target_class))
     num_proportions = 5
-    # 0th axis: shared vs not shared
+    # 0th axis: shared vs not shared vs autoencoded
     # 2nd axis: target, every other class: min/max; base
-    loss = np.zeros((2, num_proportions, 4, num_experiments))
+    loss = np.zeros((3, num_proportions, 4, num_experiments))
     target_nums = np.logspace(0, np.log10(5000), num_proportions, dtype = 'i')
     X_base = X[Y == base_class]
     X_base_feat = X_feat[Y == base_class]
+    X_base_encoded = X_encoded[Y == base_class]
+    input_bases = [X_base, X_base_feat, X_base_encoded]
     X_target = X[Y == target_class]
     X_target_feat = X_feat[Y == target_class]
+    X_target_encoded = X_encoded[Y == target_class]
+    input_targets = [X_target, X_target_feat, X_target_encoded]
+    input_tests = [X_test, X_test_feat, X_test_encoded]
     other_classes = [i for i in range(10)
                      if i not in (base_class, target_class)]
     other_class_inds_test = [(Y_test == i).nonzero() for i in other_classes]
-    def one_measurement(test_no, shared):
+    def one_measurement(test_no, feature_space):
         result = np.zeros((num_proportions, 4))
         for i, num_target in enumerate(target_nums):
-            # Use a smaller network (only the FC part) in the feature space
-            target_model = gen_target(feature_space = shared)
-            predictor = gen_target(feature_space = shared)
+            input_base = input_bases[feature_space]
+            input_target = input_targets[feature_space]
+            feature_space_size = None if feature_space == 0 \
+                                      else input_base.shape[1]
+            target_model = gen_target(feature_space_size)
+            predictor = gen_target(feature_space_size)
             target_model.summary()
             num_base = 5000
-            input_base = X_base_feat if shared else X_base
             inds_base = np.random.choice(input_base.shape[0], size = num_base,
                                          replace = False)
-            input_target = X_target_feat if shared else X_target
             inds_target = np.random.choice(input_target.shape[0],
                                            size = num_target,
                                            replace = False)
@@ -251,7 +278,7 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
                           verbose = test_no == 0,
                           callbacks = [EarlyStopping(monitor = 'loss')])
 
-            input_test = X_test_feat if shared else X_test
+            input_test = input_tests[feature_space]
             test_target_vals = target_model.predict(input_test)
             test_predict_vals = predictor.predict(input_test)
             scores = (test_target_vals - test_predict_vals)**2
@@ -267,13 +294,17 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
 
     backend = 'loky'
     r = joblib.Parallel(n_jobs = 4, backend = backend, verbose = 51)(
-        joblib.delayed(one_measurement)(test_no, False)
+        joblib.delayed(one_measurement)(test_no, 0)
         for test_no in range(num_experiments))
     loss[0, :, :, :] = np.transpose(r, axes = (1, 2, 0))
     r = joblib.Parallel(n_jobs = 4, backend = backend, verbose = 51)(
-        joblib.delayed(one_measurement)(test_no, True)
+        joblib.delayed(one_measurement)(test_no, 1)
         for test_no in range(num_experiments))
     loss[1, :, :, :] = np.transpose(r, axes = (1, 2, 0))
+    r = joblib.Parallel(n_jobs = 4, backend = backend, verbose = 51)(
+        joblib.delayed(one_measurement)(test_no, 1)
+        for test_no in range(num_experiments))
+    loss[2, :, :, :] = np.transpose(r, axes = (1, 2, 0))
 
     return target_nums, loss
 #  2}}} #
@@ -281,22 +312,46 @@ def novelty_vs_loss(base_class, target_class, num_experiments = 50,
 shared = pretrain()
 X_feat = shared.predict(X)
 X_test_feat = shared.predict(X_test)
+X_encoded = encoder.predict(X)
+X_test_encoded = encoder.predict(X_test)
 target_nums, loss = novelty_vs_loss(base_class = 0, target_class = 1,
-                                    num_experiments = 20,
-                                    shared_model = shared)
-loss_mean = np.median(loss, axis = -1)
-plt.figure()
-for i in range(2):
-    plt.subplot(1, 2, i + 1)
-    plt.plot(target_nums, loss_mean[i, :, 0], label = 'loss of target')
-    plt.plot(target_nums, loss_mean[i, :, 1], label = 'loss of others (min)')
-    plt.plot(target_nums, loss_mean[i, :, 2], label = 'loss of others (max)')
-    plt.plot(target_nums, loss_mean[i, :, 3], label = 'loss of base')
-    plt.title(['Not shared', 'Shared'][i])
-    plt.legend()
-    plt.xscale('log')
-    plt.xlabel('# of target samples')
-plt.savefig('loss.pdf')
+                                    num_experiments = 10)
+def plot_medians(target_nums, loss):
+    loss_mean = np.median(loss, axis = -1)
+    plt.figure()
+    for i in range(2):
+        plt.subplot(1, 2, i + 1)
+        plt.plot(target_nums, loss_mean[i, :, 0], label = 'loss of target')
+        plt.plot(target_nums, loss_mean[i, :, 1], label = 'loss of others (min)')
+        plt.plot(target_nums, loss_mean[i, :, 2], label = 'loss of others (max)')
+        plt.plot(target_nums, loss_mean[i, :, 3], label = 'loss of base')
+        plt.title(['Not shared', 'Shared'][i])
+        plt.legend()
+        plt.xscale('log')
+        plt.xlabel('# of target samples')
+    plt.savefig('/tmp/loss.pdf')
+
+def plot_differences(target_nums, loss):
+    plt.figure(figsize = (15, 5))
+    for i in range(3):
+        plt.subplot(1, 3, i + 1)
+        l = loss[i, :, :, :] - loss[i, :, 3, :].reshape(
+            (len(target_nums), 1, -1))
+        med = np.median(l, axis = -1)
+        err = np.var(l, axis = -1)**0.5
+        plt.plot(target_nums, med[:, 0], color = 'b', label = 'loss of target')
+        plt.fill_between(target_nums, med[:, 0] - err[:, 0], med[:, 0] + err[:, 0], facecolor = 'b', alpha = 0.5)
+        plt.plot(target_nums, med[:, 1], color = 'orange', label = 'loss of others (min)')
+        plt.fill_between(target_nums, med[:, 1] - err[:, 1], med[:, 1] + err[:, 1], facecolor = 'orange', alpha = 0.5)
+        plt.plot(target_nums, med[:, 2], color = 'g', label = 'loss of others (max)')
+        plt.fill_between(target_nums, med[:, 2] - err[:, 2], med[:, 2] + err[:, 2], facecolor = 'g', alpha = 0.5)
+        plt.title(['Not shared', 'Pretrained', 'Autoencoded'][i])
+        plt.legend()
+        plt.xscale('log')
+        plt.xlabel('# of target samples')
+    plt.tight_layout()
+    plt.savefig('/tmp/loss.pdf')
+
 # }}} MNSIT experiment (from RND paper) #
 
 #  KNN novelty vs loss {{{ #
