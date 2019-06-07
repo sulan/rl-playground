@@ -257,6 +257,11 @@ class A2C:
         self.step = 0
         self.compiled = False
 
+    def get_config(self):
+        config = {
+            'num_actors': num_actors,
+        }
+
     def compile(self, optimizer, metrics = None):
         """
         Compiles the A2C agent and the underlying model via the learner.
