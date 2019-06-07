@@ -1,6 +1,8 @@
 import numpy as np
 np.random.seed(1)
 
+from pprint import pprint
+
 from keras.models import Sequential, Model
 from keras.layers import Dense, Flatten
 
@@ -10,7 +12,11 @@ from a2c import A2C
 from ppo import PPOLearner
 # from train import Runner
 
-class DebugProcessor:
+import rl.core
+import rl.callbacks
+
+
+class DebugProcessor(rl.core.Processor):
     def process_step(self, observation, reward, done, info):
         print('Processor :: step:')
         print(observation, reward, done, info)
@@ -48,6 +54,22 @@ class DebugProcessor:
         print('==================')
         return batch
 
+    @property
+    def metrics(self):
+        return [42]
+
+    @property
+    def metrics_names(self):
+        return ['processor_test_metric']
+
+class StepCallback(rl.callbacks.CallbackList):
+    def on_step_end(self, step, logs):
+        print('Callback :: step end:')
+        print(step)
+        pprint(logs)
+        print('=====================')
+
+
 def get_model():
     shared = Sequential([
         Flatten(input_shape = (1,) + DumbMars1DEnvironment.NUM_SENSORS),
@@ -62,14 +84,19 @@ def test_ppo():
     model = get_model()
     processor = None
     # processor = DebugProcessor()
+    callbacks = []
+    callbacks = [StepCallback()]
     learner = PPOLearner(model, 10, fit_epochs = 10,
                          processor = processor)
     agent = A2C(learner, num_actors = 2, processor = processor)
     agent.compile(optimizer = 'sgd')
     def env_factory(_):
         return DumbMars1DEnvironment(2)
-    agent.fit(env_factory, 10)
+    history = agent.fit(env_factory, 10, callbacks = [StepCallback()])
+    print('Fit history:')
+    print(history.history)
     history = agent.test(env_factory, 1)
+    print('Test history:')
     print(history.history)
     agent.fit(env_factory, 10000)
     history = agent.test(env_factory, 1)

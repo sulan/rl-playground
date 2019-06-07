@@ -39,7 +39,6 @@ class A2C:
     sum of all actor steps taken so far.
 
     Features in rl.core.Agent not yet supported:
-    - processor metrics
     - random steps at the beginning of the episode
     - action repetition
     """
@@ -219,7 +218,7 @@ class A2C:
         """
         def backward(self, trajectories):
             """
-            Update the parameters based on a single trajectory.
+            Update the parameters based on the trajectories given.
 
             # Returns:
             Returns the training loss and metrics

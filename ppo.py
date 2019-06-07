@@ -4,7 +4,7 @@ from keras import backend as K
 from keras.models import Model
 from keras.layers import Lambda, Input
 
-from rl.core import Agent
+from rl.core import Processor
 from rl.policy import EpsGreedyQPolicy
 from rl.util import *
 
@@ -70,7 +70,7 @@ class PPOLearner(A2C.Learner):
         assert len(model.output) == 2, len(model.output)
         self.model = model
         self.nb_actions = model.output[0]._keras_shape[1]
-        self.processor = processor
+        self.processor = processor if processor is not None else Processor()
         self.compiled = False
 
     def compile(self, optimizer, metrics = None):
@@ -187,6 +187,12 @@ class PPOLearner(A2C.Learner):
         return actor
 
     def backward(self, trajectories):
+        """
+        # Returns:
+            a list of the different metrics (overall, clipped surrogate, vf,
+            entropy losses; all lists themselves from multiple fit_epochs) and
+            the processor metrics.
+        """
         assert self.compiled, 'PPOLearner must be compiled before training'
         # Without the ends (final state) of the trajectories
         # trajectories: list of (done, trajectory)
@@ -259,10 +265,11 @@ class PPOLearner(A2C.Learner):
         # Clone the new old model
         self.cloned_model.set_weights(self.trainable_model.get_weights())
 
-        # FIXME: vf_loss is 0 for some reason
         # Throw away the dummy losses
-        return [v for k, v in history.history.items()
-                if k not in self.trainable_model.metrics_names[4:6]]
+        metrics = [v for k, v in history.history.items()
+                   if k not in self.trainable_model.metrics_names[4:6]]
+        metrics.append(self.processor.metrics)
+        return metrics
 
     @property
     def metrics_names(self):
@@ -273,6 +280,7 @@ class PPOLearner(A2C.Learner):
         names = [name.replace(pi_dummy_name, 'pi').replace(V_dummy_name, 'V')
                  for i, name in enumerate(self.trainable_model.metrics_names)
                  if i not in (4, 5)]
+        names += self.processor.metrics_names
         return names
 
     def get_config(self):
