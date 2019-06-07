@@ -58,7 +58,7 @@ class PPOLearner(A2C.Learner):
     """
     def __init__(self, model, trajectory_length, clipping_epsilon = 0.2,
                  gamma = 1, lam = 1, vfloss_coeff = 1, entropy_coeff = 1,
-                 fit_epochs = 1):
+                 fit_epochs = 1, processor = None):
         self.trajectory_length = trajectory_length
         self.clipping_epsilon = clipping_epsilon
         self.gamma = gamma
@@ -70,6 +70,7 @@ class PPOLearner(A2C.Learner):
         assert len(model.output) == 2, len(model.output)
         self.model = model
         self.nb_actions = model.output[0]._keras_shape[1]
+        self.processor = processor
         self.compiled = False
 
     def compile(self, optimizer, metrics = None):
@@ -198,6 +199,9 @@ class PPOLearner(A2C.Learner):
         end_states = np.array(
             [trajectory[-1] for _, trajectory in trajectories])
         end_states.shape = (-1, 1) + end_states.shape[1:]
+        if self.processor is not None:
+            states = self.processor.process_state_batch(states)
+            end_states = self.processor.process_state_batch(end_states)
         _, end_values = self.cloned_model.predict(end_states)
         pi_old, V_old = self.cloned_model.predict(states)
         V_old.shape = (-1,)

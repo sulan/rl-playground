@@ -8,8 +8,45 @@ from dm_env import DumbMars1DEnvironment
 
 from a2c import A2C
 from ppo import PPOLearner
-from train import Runner
+# from train import Runner
 
+class DebugProcessor:
+    def process_step(self, observation, reward, done, info):
+        print('Processor :: step:')
+        print(observation, reward, done, info)
+        print('==================')
+        return observation, reward, done, info
+
+    def process_observation(self, observation):
+        print('Processor :: observation:')
+        print(observation)
+        print('==================')
+        return observation
+
+    def process_action(self, action):
+        print('Processor :: action:')
+        print(action)
+        print('==================')
+        return action
+
+    def process_reward(self, reward):
+        print('Processor :: reward:')
+        print(reward)
+        print('==================')
+        return reward
+
+    def process_info(self, info):
+        print('Processor :: info:')
+        print(info)
+        print('==================')
+        return info
+
+    def process_state_batch(self, batch):
+        print('Processor :: state_batch:')
+        print(batch)
+        print('Shape:', batch.shape)
+        print('==================')
+        return batch
 
 def get_model():
     shared = Sequential([
@@ -23,8 +60,11 @@ def get_model():
 
 def test_ppo():
     model = get_model()
-    learner = PPOLearner(model, 10, fit_epochs = 10)
-    agent = A2C(learner, num_actors = 2)
+    processor = None
+    # processor = DebugProcessor()
+    learner = PPOLearner(model, 10, fit_epochs = 10,
+                         processor = processor)
+    agent = A2C(learner, num_actors = 2, processor = processor)
     agent.compile(optimizer = 'sgd')
     def env_factory(_):
         return DumbMars1DEnvironment(2)
@@ -50,5 +90,5 @@ def test_ppo_runner():
     print('Test result: {} (+/- {})'.format(m, v))
 
 if __name__ == "__main__":
-    # test_ppo()
-    test_ppo_runner()
+    test_ppo()
+    # test_ppo_runner()

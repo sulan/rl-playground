@@ -3,6 +3,7 @@ from copy import deepcopy
 from keras.callbacks import History
 
 from rl.callbacks import CallbackList, Visualizer
+from rl.core import Processor
 
 class A2C:
     """
@@ -38,12 +39,11 @@ class A2C:
     sum of all actor steps taken so far.
 
     Features in rl.core.Agent not yet supported:
-    - processor
+    - processor metrics
     - random steps at the beginning of the episode
     - action repetition
     """
 
-    # TODO processor
     # TODO random steps
     # TODO action repetition
 
@@ -128,6 +128,7 @@ class A2C:
             self.trajectory = None
             self.done = None
             self.episode_reward = None
+            self.processor = Processor()
 
         def build_trajectory(self, env, max_trajectory_length, callbacks):
             assert max_trajectory_length > 0, \
@@ -137,6 +138,8 @@ class A2C:
             if self.last_observation is None:
                 # Start new episode
                 self.last_observation = deepcopy(env.reset())
+                self.last_observation = self.processor.process_observation(
+                    self.last_observation)
                 self.episode = self.get_new_episode_index()
                 self.episode_reward = 0
                 self.episode_step = 0
@@ -144,9 +147,14 @@ class A2C:
             for _ in range(min(self.trajectory_length, max_trajectory_length)):
                 callbacks.on_step_begin(self.episode_step)
                 action = self.get_action(self.last_observation)
+                action = self.processor.process_action(action)
                 callbacks.on_action_begin(action)
                 observation, reward, self.done, info = env.step(action)
                 observation = deepcopy(observation)
+                if self.processor is not None:
+                    observation, reward, self.done, info = \
+                        self.processor.process_step(observation, reward,
+                                                    self.done, info)
                 # Hack to tell Visualizer the environment
                 callbacks._set_env(env)
                 callbacks.on_action_end(action)
@@ -200,6 +208,9 @@ class A2C:
             self.trajectory = None
             self.episode_reward = None
 
+        def set_processor(self, processor):
+            self.processor = processor
+
 
     class Learner:
         """
@@ -238,10 +249,11 @@ class A2C:
             """
             raise NotImplementedError()
 
-    def __init__(self, learner, num_actors = 1):
+    def __init__(self, learner, num_actors = 1, processor = None):
         self.training = False
         self.learner = learner
         self.num_actors = num_actors
+        self.processor = processor
         self.step = 0
         self.compiled = False
 
@@ -301,6 +313,8 @@ class A2C:
             callbacks._set_model(self)
 
         actors = [self.learner.create_actor(i) for i in range(self.num_actors)]
+        for actor in actors:
+            actor.set_processor(self.processor)
         envs = [env_factory(i) for i in range(self.num_actors)]
 
         self.step = 0
