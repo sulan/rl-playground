@@ -17,6 +17,48 @@ import struct
 import sys
 
 #######################################################################
+#         Abstract base class to be compatible with Keras-RL          #
+#######################################################################
+
+class RLEnv(Env):
+    """
+    Abstract base class for compatibility with Keras-RL
+
+    Simply calls the protected (hopefully overriden) methods.
+    """
+    def step (self,action):
+        return self._step(action)
+
+    def reset (self):
+        return self._reset()
+
+    def render (self,mode='human',close=False):
+        modes = self.metadata.get('render.modes',[])
+        if len(modes) == 0:
+            raise gyme.UnsupportedMode(\
+                    '{} does not support rendering (requested mode: {})'.\
+                    format(self, mode))
+        elif mode not in modes:
+            raise gyme.UnsupportedMode(\
+                    'Unsupported rendering mode: {}. (Supported modes for {}: {})'.\
+                    format(mode, self, modes))
+        return self._render(mode=mode,close=close)
+
+    def close (self):
+        pass
+
+    def seed (self,seed=None):
+        return self._seed(seed)
+
+    def configure (self, *args, **kwargs):
+        pass
+
+    def _seed(self, seed = None):
+        self.np_random, seed = gyme.np_random(seed)
+        return [seed]
+
+
+#######################################################################
 #                            error module                             #
 #######################################################################
 
