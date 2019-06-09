@@ -23,7 +23,8 @@ class PolicyGradientActor(A2C.AbstractActor):
         self.nb_actions = model.output._keras_shape[1]
 
     def get_action(self, observation):
-        distribution = self.model.predict(observation.reshape(1, 1,-1))[0]
+        observation = observation.reshape((1, 1) + observation.shape)
+        distribution = self.model.predict(observation)[0]
         action = np.random.choice(self.nb_actions, p = distribution)
         return action
 

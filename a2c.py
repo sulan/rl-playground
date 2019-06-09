@@ -252,7 +252,7 @@ class A2C:
         self.training = False
         self.learner = learner
         self.num_actors = num_actors
-        self.processor = processor
+        self.processor = processor if processor is not None else Processor()
         self.step = 0
         self.compiled = False
 
