@@ -35,11 +35,11 @@ class RLEnv(Env):
     def render (self,mode='human',close=False):
         modes = self.metadata.get('render.modes',[])
         if len(modes) == 0:
-            raise gyme.UnsupportedMode(\
+            raise UnsupportedMode(\
                     '{} does not support rendering (requested mode: {})'.\
                     format(self, mode))
         elif mode not in modes:
-            raise gyme.UnsupportedMode(\
+            raise UnsupportedMode(\
                     'Unsupported rendering mode: {}. (Supported modes for {}: {})'.\
                     format(mode, self, modes))
         return self._render(mode=mode,close=close)
@@ -54,7 +54,7 @@ class RLEnv(Env):
         pass
 
     def _seed(self, seed = None):
-        self.np_random, seed = gyme.np_random(seed)
+        self.np_random, seed = np_random(seed)
         return [seed]
 
 
