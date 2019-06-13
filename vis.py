@@ -5,7 +5,7 @@ import numpy as np
 import h5py
 import matplotlib.pyplot as plt
 from scipy.signal import medfilt
-#%matplotlib qt5
+import pickle
 #  1}}} #
 
 
@@ -18,6 +18,7 @@ file_name = 'train.out.hdf5'
 file_name = '/tmp/train.out.hdf5'
 A2C = True
 TEST_INTERVAL = 100
+FIT_EPOCHS_PER_UPDATE = 3
 #  Datasets {{{1 #
 f = h5py.File(file_name, 'r')
 g = f['default']
@@ -73,6 +74,7 @@ plt.show()
 #  }}} Plot # 
 
 #  Plot PPO {{{ #
+# Loss only
 plt.figure()
 plt.plot(loss[0::3])
 plt.plot(loss[1::3])
@@ -81,16 +83,41 @@ plt.legend(['clip', 'vf', 'entropy'])
 plt.xlabel('#updates')
 plt.title('loss')
 plt.grid(True)
+# Everything
 plt.figure()
-plt.plot(loss[0::3])
-plt.plot(loss[1::3])
-plt.plot(loss[2::3])
+for i in range(FIT_EPOCHS_PER_UPDATE):
+    plt.plot(loss[0 + 3 * i::3 * FIT_EPOCHS_PER_UPDATE], 'b',
+             label = 'clip_loss' if i == 0 else '_')
+    plt.plot(loss[1 + 3 * i::3 * FIT_EPOCHS_PER_UPDATE], color = 'orange',
+             label = 'vf_loss' if i == 0 else '_')
+    plt.plot(loss[2 + 3 * i::3 * FIT_EPOCHS_PER_UPDATE], 'g',
+             label = 'entropy_loss' if i == 0 else '_')
 plt.xlabel('#updates')
-plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, '.')
-plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'x')
-plt.legend(['clip_loss', 'vf_loss', 'entropy_loss', 'episode_rewards', 'reward_prediction'])
+plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, er, 'r.',
+         label = 'episode_rewards')
+plt.plot(ee + np.random.random(ee.shape) * 0.5 - 0.25, rp, 'px',
+         label = 'reward_prediction')
+plt.legend()
 plt.grid(True)
 #  }}} Plot PPO #
+
+counts_file = 'state.counts'
+#  Visited states {{{ #
+with open(counts_file, 'rb') as f:
+    counts = pickle.load(f)
+counts = np.array([list(s) + [c] for s,c in counts.items()])
+states = counts[:, :-1]
+# Project to first two dimensions for now
+plt.figure()
+dimsize = states.shape[1]
+for i in range(dimsize - 1):
+    for j in range(i + 1, dimsize):
+        plt.subplot(dimsize - 1, dimsize - 1, i * (dimsize - 1) + j - i)
+        plt.scatter(states[:,i], states[:,j], s = counts[:, -1] ** 0.5)
+        plt.xlabel('Axis: ' + str(i))
+        plt.ylabel('Axis: ' + str(j))
+plt.tight_layout()
+#  }}} Visited states #
 
 #%reset
 #  GC {{{ # 
